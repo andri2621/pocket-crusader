@@ -9,39 +9,65 @@ export class Preloader extends Scene
 
     init ()
     {
-        //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(512, 384, 'background');
+        //  Simple loading bar
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
 
-        //  A simple progress bar. This is the outline of the bar.
-        this.add.rectangle(512, 384, 468, 32).setStrokeStyle(1, 0xffffff);
+        //  Loading text
+        this.add.text(centerX, centerY - 40, 'Loading...', {
+            fontFamily: 'Arial',
+            fontSize: '20px',
+            color: '#d4a574',
+        }).setOrigin(0.5);
 
-        //  This is the progress bar itself. It will increase in size from the left based on the % of progress.
-        const bar = this.add.rectangle(512-230, 384, 4, 28, 0xffffff);
+        //  Bar outline
+        this.add.rectangle(centerX, centerY, 320, 24).setStrokeStyle(2, 0xd4a574);
 
-        //  Use the 'progress' event emitted by the LoaderPlugin to update the loading bar
+        //  Fill bar
+        const bar = this.add.rectangle(centerX - 156, centerY, 4, 18, 0xd4a574);
+
         this.load.on('progress', (progress: number) => {
-
-            //  Update the progress bar (our bar is 464px wide, so 100% = 464px)
-            bar.width = 4 + (460 * progress);
-
+            bar.width = 4 + (312 * progress);
         });
     }
 
     preload ()
     {
-        //  Load the assets for the game - Replace with your own assets
-        this.load.setPath('assets');
+        //  Load game assets — Tiny Swords pack
+        this.load.setPath('assets/tiny-swords');
 
-        this.load.image('logo', 'logo.png');
-        this.load.image('star', 'star.png');
+        // ── Terrain ─────────────────────────────────────────
+        this.load.image('grass', 'terrain/grass.png');
+
+        // Tree spritesheet (192x256 per frame, 8 frames for idle sway)
+        this.load.spritesheet('tree', 'Terrain/Resources/Wood/Trees/Tree1.png', {
+            frameWidth: 192,
+            frameHeight: 256,
+        });
+
+        // ── Worker (Pawn) Spritesheets ──────────────────────
+        // Idle: 8 frames (192x192 each)
+        this.load.spritesheet('pawn-idle', 'Units/Blue Units/Pawn/Pawn_Idle.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Run: 6 frames (192x192 each)
+        this.load.spritesheet('pawn-run', 'Units/Blue Units/Pawn/Pawn_Run.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Chop (Interact Axe): 6 frames (192x192 each)
+        this.load.spritesheet('pawn-chop', 'Units/Blue Units/Pawn/Pawn_Interact Axe.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
     }
 
     create ()
     {
-        //  When all the assets have loaded, it's often worth creating global objects here that the rest of the game can use.
-        //  For example, you can define global animations here, so we can use them in other scenes.
-
-        //  Move to the MainMenu. You could also swap this for a Scene Transition, such as a camera fade.
-        this.scene.start('MainMenu');
+        //  All assets loaded — start the game
+        this.scene.start('GameScene');
     }
 }

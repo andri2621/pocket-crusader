@@ -1,0 +1,141 @@
+/* src/styles/App.module.css */
+.container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at center, #2b1b17 0%, #0f0f15 100%);
+    z-index: 50;
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Premium glassmorphism panel */
+.panel {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 40px 60px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.title {
+    font-size: 48px;
+    margin: 0 0 10px 0;
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.subtitle {
+    font-size: 18px;
+    color: #94a3b8;
+    margin-bottom: 40px;
+}
+
+.playButton {
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+    color: #fff;
+    border: none;
+    padding: 16px 48px;
+    font-size: 20px;
+    font-weight: bold;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 10px 15px -3px rgba(217, 119, 6, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.playButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(217, 119, 6, 0.5);
+}
+
+.playButton:active {
+    transform: translateY(1px);
+    box-shadow: 0 5px 10px -3px rgba(217, 119, 6, 0.4);
+}
+
+/* Overlay for Re-enter Fullscreen */
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GAME HUD — Resource bar overlay
+   ═══════════════════════════════════════════════════════════ */
+.hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 60;
+    display: flex;
+    gap: 10px;
+    pointer-events: none;  /* Don't block game input */
+}
+
+.hudItem {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: #fbbf24;
+    min-width: 70px;
+}
+
+.hudIcon {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.hudValue {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+}

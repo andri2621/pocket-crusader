@@ -1,97 +1,110 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
-import { MainMenu } from "./game/scenes/MainMenu";
+import { useGameStore } from "./store/useGameStore";
+import styles from "./styles/App.module.css";
 
 function App() {
-    // The sprite can only be moved in the MainMenu Scene
-    const [canMoveSprite, setCanMoveSprite] = useState(true);
-
-    //  References to the PhaserGame component (game and scene are exposed)
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [spritePosition, setSpritePosition] = useState({ x: 0, y: 0 });
+    const [hasStarted, setHasStarted] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(true);
+    const wood = useGameStore((state) => state.wood);
 
-    const changeScene = () => {
-        if (phaserRef.current) {
-            const scene = phaserRef.current.scene as MainMenu;
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
 
-            if (scene) {
-                scene.changeScene();
+        document.addEventListener("fullscreenchange", handleFullscreenChange);
+        document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+
+        return () => {
+            document.removeEventListener("fullscreenchange", handleFullscreenChange);
+            document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+        };
+    }, []);
+
+    const requestFullscreenAndLock = async () => {
+        // Request Fullscreen
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
             }
+        } catch (err) {
+            console.warn("Fullscreen request failed:", err);
+        }
+
+        // Lock Orientation to Landscape
+        try {
+            const orientation = screen.orientation as any;
+            if (orientation && orientation.lock) {
+                await orientation.lock("landscape");
+            }
+        } catch (err) {
+            console.warn("Orientation lock failed:", err);
         }
     };
 
-    const moveSprite = () => {
-        if (phaserRef.current) {
-            const scene = phaserRef.current.scene as MainMenu;
-
-            if (scene && scene.scene.key === "MainMenu") {
-                // Get the update logo position
-                scene.moveLogo(({ x, y }) => {
-                    setSpritePosition({ x, y });
-                });
-            }
-        }
+    const handlePlayClick = async () => {
+        await requestFullscreenAndLock();
+        setHasStarted(true);
+        setIsFullscreen(true); // Optimistically set to true
     };
 
-    const addSprite = () => {
-        if (phaserRef.current) {
-            const scene = phaserRef.current.scene;
-
-            if (scene) {
-                // Add more stars
-                const x = Phaser.Math.Between(64, scene.scale.width - 64);
-                const y = Phaser.Math.Between(64, scene.scale.height - 64);
-
-                //  `add.sprite` is a Phaser GameObjectFactory method and it returns a Sprite Game Object instance
-                const star = scene.add.sprite(x, y, "star");
-
-                //  ... which you can then act upon. Here we create a Phaser Tween to fade the star sprite in and out.
-                //  You could, of course, do this from within the Phaser Scene code, but this is just an example
-                //  showing that Phaser objects and systems can be acted upon from outside of Phaser itself.
-                scene.add.tween({
-                    targets: star,
-                    duration: 500 + Math.random() * 1000,
-                    alpha: 0,
-                    yoyo: true,
-                    repeat: -1,
-                });
-            }
-        }
+    const handleResumeClick = async () => {
+        await requestFullscreenAndLock();
+        // The event listener will automatically update `isFullscreen`
     };
 
-    // Event emitted from the PhaserGame component
     const currentScene = (scene: Phaser.Scene) => {
-        setCanMoveSprite(scene.scene.key !== "MainMenu");
+        console.log('[Pocket Crusader] Active scene:', scene.scene.key);
     };
 
     return (
-        <div id="app">
-            <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-            <div>
-                <div>
-                    <button className="button" onClick={changeScene}>
-                        Change Scene
-                    </button>
+        <div id="app" style={{ width: '100vw', height: '100vh', overflow: 'hidden', margin: 0, padding: 0 }}>
+            {/* Landing Page */}
+            {!hasStarted && (
+                <div className={styles.container}>
+                    <div className={styles.panel}>
+                        <div className={styles.content}>
+                            <h1 className={styles.title}>Pocket Crusader</h1>
+                            <p className={styles.subtitle}>A Mobile-First RTS Experience</p>
+                            <button className={styles.playButton} onClick={handlePlayClick}>
+                                Play Game
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <button
-                        disabled={canMoveSprite}
-                        className="button"
-                        onClick={moveSprite}
-                    >
-                        Toggle Movement
-                    </button>
+            )}
+            
+            {/* Fullscreen Recovery Overlay */}
+            {hasStarted && !isFullscreen && (
+                <div className={styles.overlay}>
+                    <div className={styles.panel}>
+                        <div className={styles.content}>
+                            <h2 className={styles.title} style={{ fontSize: '32px' }}>Game Paused</h2>
+                            <p className={styles.subtitle}>Please return to fullscreen to continue playing.</p>
+                            <button className={styles.playButton} onClick={handleResumeClick}>
+                                Resume
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div className="spritePosition">
-                    Sprite Position:
-                    <pre>{`{\n  x: ${spritePosition.x}\n  y: ${spritePosition.y}\n}`}</pre>
-                </div>
-                <div>
-                    <button className="button" onClick={addSprite}>
-                        Add New Sprite
-                    </button>
-                </div>
-            </div>
+            )}
+
+            {/* Phaser Game Canvas */}
+            {hasStarted && (
+                <>
+                    <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
+                    
+                    {/* Game HUD Overlay */}
+                    <div className={styles.hud}>
+                        <div className={styles.hudItem}>
+                            <span className={styles.hudIcon}>🪵</span>
+                            <span className={styles.hudValue}>{wood}</span>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
