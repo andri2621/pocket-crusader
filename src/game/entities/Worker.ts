@@ -20,6 +20,12 @@ export class Worker extends BaseUnit {
         return this.isCarrying;
     }
 
+    public override get canWander(): boolean {
+        // Workers should not wander if they are assigned to a construction job
+        // or currently carrying wood to deposit.
+        return this.workerState === 'IDLE' && !this.isConstructionJob && !this.isCarrying;
+    }
+
     constructor(config: UnitConfig) {
         super(config);
         this.mainSprite.play('pawn-idle');
@@ -35,6 +41,9 @@ export class Worker extends BaseUnit {
             new Phaser.Geom.Rectangle(-32, -64, 64, 64),
             Phaser.Geom.Rectangle.Contains
         );
+
+        // Workers wander every 5-10 seconds
+        this.resetWanderDelay(5000, 10000);
     }
 
     protected override onStateChange(newState: WorkerState): void {

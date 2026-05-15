@@ -9,14 +9,29 @@ export abstract class BaseUnit extends BaseEntity {
     protected isMoving: boolean = false;
     protected currentTweenChain: Phaser.Tweens.TweenChain | null = null;
 
+    // ── Wandering AI ───────────────────────────────────────
+    public idleTimer: number = 0;
+    public wanderDelay: number = 0;
+
+    public get canWander(): boolean {
+        return this.workerState === 'IDLE';
+    }
+
     constructor(config: UnitConfig) {
         super(config);
         this.speed = config.speed ?? 160; // ms per tile
     }
 
     public setWorkerState(newState: WorkerState) {
+        if (this.workerState !== newState) {
+            this.idleTimer = 0; // Reset idle timer on state change
+        }
         this.workerState = newState;
         this.onStateChange(newState);
+    }
+
+    public resetWanderDelay(minMs: number, maxMs: number) {
+        this.wanderDelay = Phaser.Math.Between(minMs, maxMs);
     }
 
     // Hook for concrete classes to override for animations
@@ -103,6 +118,11 @@ export abstract class BaseUnit extends BaseEntity {
     }
 
     public override update(time: number, delta: number): void {
-        // Additional update logic can be implemented by children
+        // Track idle time for wandering
+        if (this.workerState === 'IDLE') {
+            this.idleTimer += delta;
+        } else {
+            this.idleTimer = 0;
+        }
     }
 }

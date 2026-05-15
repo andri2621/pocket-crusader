@@ -6,6 +6,7 @@ import { GridPosition, BuildingType } from '../../types/game';
 import { GridManager } from './GridManager';
 import { useGameStore } from '../../store/useGameStore';
 import { Worker } from '../entities/Worker';
+import { King } from '../entities/King';
 
 export class EntityManager {
     private scene: Scene;
@@ -66,6 +67,9 @@ export class EntityManager {
             this.assignTimer = 0;
             this.assignIdleWorkers();
         }
+
+        // Process Wandering AI for idle units
+        this.processWanderingAI();
     }
 
     // ══════════════════════════════════════════════════════════
@@ -88,10 +92,15 @@ export class EntityManager {
         if (workers < maxPop) {
             const stronghold = this.buildings.find(b => b.buildingType === 'stronghold');
             if (stronghold) {
+                // Anti-stacking: Find a random walkable tile near the stronghold (radius 2)
+                // Fallback to row + 2 if no tiles are available
+                const spawnTile = this.gridManager.getRandomWalkableTileInRange(stronghold.gridX, stronghold.gridY, 2) 
+                    || { col: stronghold.gridX, row: stronghold.gridY + 2 };
+
                 const worker = new Worker({ 
                     scene: this.scene, 
-                    col: stronghold.gridX, 
-                    row: stronghold.gridY + 1, 
+                    col: spawnTile.col, 
+                    row: spawnTile.row, 
                     texture: 'pawn-idle' 
                 });
                 this.addUnit(worker);
@@ -107,6 +116,38 @@ export class EntityManager {
     private onBuildingCompleted(building: BaseBuilding) {
         if (building.buildingType === 'house') {
             this.recalculatePopulation();
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  WANDERING AI
+    // ══════════════════════════════════════════════════════════
+
+    private processWanderingAI() {
+        for (const unit of this.units) {
+            if (unit.canWander && unit.idleTimer > unit.wanderDelay) {
+                unit.idleTimer = 0; // Reset immediately to prevent rapid re-triggering
+
+                let radius = 3;
+                if (unit instanceof King) {
+                    radius = 1;
+                    unit.resetWanderDelay(15000, 20000);
+                } else if (unit instanceof Worker) {
+                    unit.resetWanderDelay(5000, 10000);
+                }
+
+                const targetTile = this.gridManager.getRandomWalkableTileInRange(unit.gridX, unit.gridY, radius);
+                
+                if (targetTile) {
+                    const startPos = { col: unit.gridX, row: unit.gridY };
+                    this.gridManager.findPath(startPos, targetTile, (path) => {
+                        // Check canWander again in case state changed during async pathfinding
+                        if (path && unit.canWander) { 
+                            unit.moveAlongPath(path);
+                        }
+                    });
+                }
+            }
         }
     }
 

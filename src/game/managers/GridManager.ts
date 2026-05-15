@@ -108,6 +108,29 @@ export class GridManager {
     }
 
     /**
+     * Find a random walkable tile within a given radius around a center point.
+     * Used for idle wandering AI and anti-stacking spawn offsets.
+     */
+    public getRandomWalkableTileInRange(col: number, row: number, radius: number): GridPosition | null {
+        const validTiles: GridPosition[] = [];
+        for (let r = -radius; r <= radius; r++) {
+            for (let c = -radius; c <= radius; c++) {
+                if (r === 0 && c === 0) continue; // Don't pick the exact current tile
+                
+                const nc = col + c;
+                const nr = row + r;
+                
+                if (this.isTileWalkable(nc, nr)) {
+                    validTiles.push({ col: nc, row: nr });
+                }
+            }
+        }
+        
+        if (validTiles.length === 0) return null;
+        return validTiles[Math.floor(Math.random() * validTiles.length)];
+    }
+
+    /**
      * Check if an entire rectangular area is available for building placement.
      * Returns true only if ALL tiles in the area are within bounds and walkable.
      */

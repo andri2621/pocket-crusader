@@ -55,6 +55,9 @@ export class King extends BaseUnit {
             strokeThickness: 3
         }).setOrigin(0.5);
         this.add(label);
+
+        // King wanders every 15-20 seconds (calm and observant)
+        this.resetWanderDelay(15000, 20000);
     }
 
     protected override onStateChange(newState: WorkerState): void {
