@@ -37,7 +37,10 @@ export class Preloader extends Scene
         this.load.setPath('assets/tiny-swords');
 
         // ── Terrain ─────────────────────────────────────────
-        this.load.image('grass', 'terrain/grass.png');
+        this.load.spritesheet('grass_tiles', 'Terrain/Tileset/Tilemap_color1.png', {
+            frameWidth: 64,
+            frameHeight: 64
+        });
 
         // Tree spritesheet (192x256 per frame, 8 frames for idle sway)
         this.load.spritesheet('tree', 'Terrain/Resources/Wood/Trees/Tree1.png', {

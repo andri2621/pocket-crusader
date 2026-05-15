@@ -146,7 +146,7 @@ export class GameScene extends Scene {
             for (let col = 0; col < GRID_COLS; col++) {
                 const x = col * TILE_SIZE + TILE_SIZE / 2;
                 const y = row * TILE_SIZE + TILE_SIZE / 2;
-                this.add.image(x, y, 'grass').setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(0);
+                this.add.image(x, y, 'grass_tiles', 10).setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(0);
             }
         }
     }
