@@ -19,7 +19,15 @@ export abstract class BaseUnit extends BaseEntity {
 
     constructor(config: UnitConfig) {
         super(config);
-        this.speed = config.speed ?? 160; // ms per tile
+        this.speed = config.speed ?? 150;
+        this.workerState = 'IDLE';
+
+        // Add a persistent visual jitter (-8 to +8) to the sprite
+        // so multiple units on the same tile don't perfectly overlap
+        const jitterX = (Math.random() - 0.5) * 16;
+        const jitterY = (Math.random() - 0.5) * 16;
+        this.mainSprite.x += jitterX;
+        this.mainSprite.y += jitterY;
     }
 
     public setWorkerState(newState: WorkerState) {

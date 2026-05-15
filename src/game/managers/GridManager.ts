@@ -108,6 +108,30 @@ export class GridManager {
     }
 
     /**
+     * Find a random walkable adjacent tile. Used to prevent units from stacking on the same spot.
+     */
+    public getRandomAdjacentWalkable(col: number, row: number): GridPosition | null {
+        const directions = [
+            { dc: 0, dr: -1 }, { dc: 0, dr: 1 }, { dc: -1, dr: 0 }, { dc: 1, dr: 0 },
+            { dc: -1, dr: -1 }, { dc: 1, dr: -1 }, { dc: -1, dr: 1 }, { dc: 1, dr: 1 },
+        ];
+
+        const validTiles: GridPosition[] = [];
+
+        for (const dir of directions) {
+            const nc = col + dir.dc;
+            const nr = row + dir.dr;
+
+            if (this.isTileWalkable(nc, nr)) {
+                validTiles.push({ col: nc, row: nr });
+            }
+        }
+
+        if (validTiles.length === 0) return null;
+        return validTiles[Math.floor(Math.random() * validTiles.length)];
+    }
+
+    /**
      * Find a random walkable tile within a given radius around a center point.
      * Used for idle wandering AI and anti-stacking spawn offsets.
      */

@@ -33,6 +33,10 @@ export class Worker extends BaseUnit {
 
     constructor(config: UnitConfig) {
         super(config);
+        
+        // Randomize speed slightly (145 to 165)
+        this.speed = 145 + Math.random() * 20;
+
         this.mainSprite.play('pawn-idle');
         
         // Pawn sprites are 192x192 with the character in the center 64x64.

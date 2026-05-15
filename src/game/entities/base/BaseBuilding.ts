@@ -8,7 +8,7 @@ export abstract class BaseBuilding extends BaseEntity {
     public isDropOff: boolean = false;
 
     // Construction Limits
-    public maxBuilders: number = 3;
+    public maxBuilders: number = 2;
     public currentBuilders: string[] = [];
 
     // ── Construction Progress ──────────────────────────────

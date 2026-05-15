@@ -279,14 +279,27 @@ export class EntityManager {
         if (worker.assignedHut !== hut) return;
         
         const currentPos = { col: worker.gridX, row: worker.gridY };
-        const tree = this.getNearestResource(currentPos, 'wood');
         
-        if (!tree) {
+        // Smart Tree Selection: Get all trees, sort by distance, pick random from top 3
+        const validTrees = this.resources.filter(r => r.resourceType === 'wood' && r.currentHealth > 0);
+        validTrees.sort((a, b) => {
+            const distA = Math.abs(a.gridX - hut.gridX) + Math.abs(a.gridY - hut.gridY);
+            const distB = Math.abs(b.gridX - hut.gridX) + Math.abs(b.gridY - hut.gridY);
+            return distA - distB;
+        });
+
+        const topTrees = validTrees.slice(0, 3);
+        if (topTrees.length === 0) {
             worker.setWorkerState('IDLE');
             return;
         }
 
-        const treeAdj = this.gridManager.findAdjacentWalkable(tree.gridX, tree.gridY, currentPos);
+        const tree = topTrees[Math.floor(Math.random() * topTrees.length)];
+
+        // Stand Positions: Pick a random adjacent tile so workers don't overlap on the same spot
+        const treeAdj = this.gridManager.getRandomAdjacentWalkable(tree.gridX, tree.gridY) || 
+                        this.gridManager.findAdjacentWalkable(tree.gridX, tree.gridY, currentPos);
+
         if (treeAdj) {
             this.gridManager.findPath(currentPos, treeAdj, (path) => {
                 if (path && worker.assignedHut === hut) {
