@@ -3,6 +3,7 @@ import { UnitConfig } from '../../types/entity.types';
 import { WorkerState } from '../../types/game';
 import { BaseResource } from './base/BaseResource';
 import { BaseBuilding } from './base/BaseBuilding';
+import { BuildingEntity } from './BuildingEntity';
 import { useGameStore } from '../../store/useGameStore';
 
 export class Worker extends BaseUnit {
@@ -14,16 +15,20 @@ export class Worker extends BaseUnit {
     // ── Construction State ─────────────────────────────────
     private buildTimer: Phaser.Time.TimerEvent | null = null;
     private targetBuilding: BaseBuilding | null = null;
+    public assignedBuildingId: string | null = null;
     public isConstructionJob: boolean = false;
+
+    // ── Automation State ───────────────────────────────────
+    public assignedHut: BuildingEntity | null = null;
 
     public get isCarryingWood(): boolean {
         return this.isCarrying;
     }
 
     public override get canWander(): boolean {
-        // Workers should not wander if they are assigned to a construction job
-        // or currently carrying wood to deposit.
-        return this.workerState === 'IDLE' && !this.isConstructionJob && !this.isCarrying;
+        // Workers should not wander if they are assigned to a construction job,
+        // carrying wood, or assigned to automate a hut.
+        return this.workerState === 'IDLE' && !this.isConstructionJob && !this.isCarrying && !this.assignedHut;
     }
 
     constructor(config: UnitConfig) {
@@ -70,15 +75,23 @@ export class Worker extends BaseUnit {
             case 'IDLE':
                 if (this.isConstructionJob) {
                     this.mainSprite.play('pawn-idle-hammer');
+                } else if (this.isCarrying) {
+                    this.mainSprite.play('pawn-idle-wood');
+                } else if (this.assignedHut) {
+                    this.mainSprite.play('pawn-idle-axe');
                 } else {
-                    this.mainSprite.play(this.isCarrying ? 'pawn-idle-wood' : 'pawn-idle');
+                    this.mainSprite.play('pawn-idle');
                 }
                 break;
             case 'MOVING':
                 if (this.isConstructionJob) {
                     this.mainSprite.play('pawn-run-hammer');
+                } else if (this.isCarrying) {
+                    this.mainSprite.play('pawn-run-wood');
+                } else if (this.assignedHut) {
+                    this.mainSprite.play('pawn-run-axe');
                 } else {
-                    this.mainSprite.play(this.isCarrying ? 'pawn-run-wood' : 'pawn-run');
+                    this.mainSprite.play('pawn-run');
                 }
                 break;
             case 'CHOPPING':
@@ -175,6 +188,9 @@ export class Worker extends BaseUnit {
 
         this.targetBuilding = building;
         this.isConstructionJob = true;
+        this.assignedBuildingId = building.id;
+        building.addBuilder(this.id);
+        
         this.setWorkerState('CONSTRUCTING');
 
         // Face the building
@@ -214,8 +230,33 @@ export class Worker extends BaseUnit {
             this.buildTimer.destroy();
             this.buildTimer = null;
         }
+        if (this.targetBuilding) {
+            this.targetBuilding.removeBuilder(this.id);
+        }
         this.targetBuilding = null;
+        this.assignedBuildingId = null;
         this.isConstructionJob = false;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  HUT AUTOMATION
+    // ══════════════════════════════════════════════════════════
+
+    public startHutAutomation(hut: BuildingEntity): void {
+        this.cancelBuilding();
+        this.cancelHutAutomation();
+
+        this.assignedHut = hut;
+        hut.addWorker(this.id);
+        // The actual loop logic (find tree, chop, return to hut) is managed 
+        // by EntityManager or InteractionManager routing, but we record the state here.
+    }
+
+    public cancelHutAutomation(): void {
+        if (this.assignedHut) {
+            this.assignedHut.removeWorker(this.id);
+            this.assignedHut = null;
+        }
     }
 
     /**

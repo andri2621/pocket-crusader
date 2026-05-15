@@ -165,6 +165,10 @@ export class GameScene extends Scene {
         this.anims.create({ key: 'pawn-chop', frames: this.anims.generateFrameNumbers('pawn-chop', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'tree-sway', frames: this.anims.generateFrameNumbers('tree', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
 
+        // ── Axe Worker Animations ──
+        this.anims.create({ key: 'pawn-idle-axe', frames: this.anims.generateFrameNumbers('pawn-idle-axe', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
+        this.anims.create({ key: 'pawn-run-axe', frames: this.anims.generateFrameNumbers('pawn-run-axe', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+
         // ── Wood Carrying Animations ──
         this.anims.create({ key: 'pawn-idle-wood', frames: this.anims.generateFrameNumbers('pawn-idle-wood', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run-wood', frames: this.anims.generateFrameNumbers('pawn-run-wood', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });

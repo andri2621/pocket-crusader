@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { EntityConfig } from '../../../types/entity.types';
 
 export abstract class BaseEntity extends Phaser.GameObjects.Container {
+    public readonly id: string;
     public gridX: number = 0;
     public gridY: number = 0;
     public isSelected: boolean = false;
@@ -15,6 +16,8 @@ export abstract class BaseEntity extends Phaser.GameObjects.Container {
     constructor(config: EntityConfig) {
         super(config.scene, config.x ?? 0, config.y ?? 0);
         
+        this.id = Phaser.Math.RND.uuid();
+
         // Add to scene
         this.scene.add.existing(this);
 

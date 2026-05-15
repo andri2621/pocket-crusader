@@ -7,6 +7,7 @@ import { GridManager } from './GridManager';
 import { useGameStore } from '../../store/useGameStore';
 import { Worker } from '../entities/Worker';
 import { King } from '../entities/King';
+import { BuildingEntity } from '../entities/BuildingEntity';
 
 export class EntityManager {
     private scene: Scene;
@@ -156,23 +157,58 @@ export class EntityManager {
     // ══════════════════════════════════════════════════════════
 
     /**
-     * Auto-assign idle workers to the nearest unfinished building.
+     * Auto-assign idle workers to jobs based on a 3-tier priority system.
      */
     private assignIdleWorkers() {
-        const unfinished = this.buildings.filter(b => !b.isCompleted);
-        if (unfinished.length === 0) return;
-
-        const idleWorkers = this.units.filter(
-            u => u instanceof Worker && u.workerState === 'IDLE' && !(u as Worker).isConstructionJob
+        let idleWorkers = this.units.filter(
+            u => u instanceof Worker && u.workerState === 'IDLE' && !(u as Worker).isConstructionJob && !(u as Worker).assignedHut
         ) as Worker[];
 
-        for (const worker of idleWorkers) {
-            const workerPos = { col: worker.gridX, row: worker.gridY };
-            const nearestBuilding = this.getNearestUnfinishedBuilding(workerPos);
-            if (!nearestBuilding) continue;
+        if (idleWorkers.length === 0) return;
 
-            this.dispatchWorkerToBuilding(worker, nearestBuilding);
+        // PRIORITY 1: Multi-Project Construction
+        const unfinishedBuildings = this.buildings.filter(b => !b.isCompleted);
+        
+        for (const building of unfinishedBuildings) {
+            let needed = building.availableBuilderSpots;
+            if (needed <= 0) continue;
+
+            idleWorkers.sort((a, b) => {
+                const distA = Math.abs(a.gridX - building.gridX) + Math.abs(a.gridY - building.gridY);
+                const distB = Math.abs(b.gridX - building.gridX) + Math.abs(b.gridY - building.gridY);
+                return distA - distB;
+            });
+
+            const toAssign = idleWorkers.splice(0, needed);
+            for (const worker of toAssign) {
+                this.dispatchWorkerToBuilding(worker, building);
+            }
+
+            if (idleWorkers.length === 0) return;
         }
+
+        // PRIORITY 2: Hut Automation
+        const completedHuts = this.buildings.filter(b => b.buildingType === 'woodcutter_hut' && b.isCompleted) as BuildingEntity[];
+
+        for (const hut of completedHuts) {
+            let needed = Math.max(0, hut.maxWorkers - hut.assignedWorkers.length);
+            if (needed <= 0) continue;
+
+            idleWorkers.sort((a, b) => {
+                const distA = Math.abs(a.gridX - hut.gridX) + Math.abs(a.gridY - hut.gridY);
+                const distB = Math.abs(b.gridX - hut.gridX) + Math.abs(b.gridY - hut.gridY);
+                return distA - distB;
+            });
+
+            const toAssign = idleWorkers.splice(0, needed);
+            for (const worker of toAssign) {
+                this.dispatchWorkerToHut(worker, hut);
+            }
+
+            if (idleWorkers.length === 0) return;
+        }
+
+        // PRIORITY 3: Leftover idle workers will eventually trigger Wandering AI in processWanderingAI()
     }
 
     /**
@@ -204,6 +240,61 @@ export class EntityManager {
                     });
                 } else {
                     worker.isConstructionJob = false;
+                    worker.cancelBuilding();
+                }
+            });
+        }
+    }
+
+    /**
+     * Dispatch a worker to automate a Woodcutter's Hut.
+     */
+    public dispatchWorkerToHut(worker: Worker, hut: BuildingEntity) {
+        const startPos = { col: worker.gridX, row: worker.gridY };
+        const adjTile = this.findAdjacentToBuilding(hut, startPos);
+        if (!adjTile) return;
+
+        const isAdjacent = this.isAdjacentToBuilding(worker, hut);
+        
+        worker.startHutAutomation(hut);
+
+        if (isAdjacent) {
+            this.handleHutAutomationLoop(worker, hut);
+        } else {
+            this.gridManager.findPath(startPos, adjTile, (path) => {
+                if (path && worker.assignedHut === hut) {
+                    worker.moveAlongPath(path, () => {
+                        if (worker.assignedHut === hut) {
+                            this.handleHutAutomationLoop(worker, hut);
+                        }
+                    });
+                } else {
+                    worker.cancelHutAutomation();
+                }
+            });
+        }
+    }
+
+    public handleHutAutomationLoop(worker: Worker, hut: BuildingEntity) {
+        if (worker.assignedHut !== hut) return;
+        
+        const currentPos = { col: worker.gridX, row: worker.gridY };
+        const tree = this.getNearestResource(currentPos, 'wood');
+        
+        if (!tree) {
+            worker.setWorkerState('IDLE');
+            return;
+        }
+
+        const treeAdj = this.gridManager.findAdjacentWalkable(tree.gridX, tree.gridY, currentPos);
+        if (treeAdj) {
+            this.gridManager.findPath(currentPos, treeAdj, (path) => {
+                if (path && worker.assignedHut === hut) {
+                    worker.moveAlongPath(path, () => {
+                        if (worker.assignedHut === hut) {
+                            worker.startChopping(tree);
+                        }
+                    });
                 }
             });
         }

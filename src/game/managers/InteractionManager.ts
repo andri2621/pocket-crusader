@@ -301,8 +301,9 @@ export class InteractionManager {
                 return;
             }
 
-            // Cancel any construction job
+            // Cancel any construction job or hut automation
             worker.cancelBuilding();
+            worker.cancelHutAutomation();
 
             const startPos = { col: worker.gridX, row: worker.gridY };
             const isAdjacent = Math.abs(worker.gridX - resource.gridX) <= 1 && Math.abs(worker.gridY - resource.gridY) <= 1;
@@ -331,8 +332,9 @@ export class InteractionManager {
 
             this.showTapIndicator(building.gridX, building.gridY);
             
-            // Cancel any existing construction job before reassigning
+            // Cancel any existing job before reassigning
             worker.cancelBuilding();
+            worker.cancelHutAutomation();
 
             // CASE A: Unfinished building → manual build order
             if (!building.isCompleted) {
@@ -398,9 +400,10 @@ export class InteractionManager {
             if (this.gridManager.isTileWalkable(targetPos.col, targetPos.row)) {
                 this.showTapIndicator(targetPos.col, targetPos.row);
                 
-                // Cancel construction if manually moving
+                // Cancel jobs if manually moving
                 if (this.selectedUnit instanceof Worker) {
                     (this.selectedUnit as Worker).cancelBuilding();
+                    (this.selectedUnit as Worker).cancelHutAutomation();
                 }
 
                 const startPos = { col: this.selectedUnit.gridX, row: this.selectedUnit.gridY };
@@ -461,8 +464,8 @@ export class InteractionManager {
     private handleResourceCollected(worker: Worker, nextTargetTree?: BaseResource) {
         const currentPos = { col: worker.gridX, row: worker.gridY };
         
-        // Find nearest drop-off point (Stronghold OR Woodcutter Hut — any building with isDropOff=true)
-        const dropOff = this.entityManager.getNearestDropOff(currentPos);
+        // Find nearest drop-off point, prioritizing assigned hut if automating
+        const dropOff = worker.assignedHut || this.entityManager.getNearestDropOff(currentPos);
         if (!dropOff) return;
 
         const adjTile = this.gridManager.findAdjacentWalkable(dropOff.gridX, dropOff.gridY, currentPos);

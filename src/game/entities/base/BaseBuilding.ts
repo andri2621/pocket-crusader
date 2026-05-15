@@ -7,6 +7,10 @@ export abstract class BaseBuilding extends BaseEntity {
     public isCompleted: boolean = false;
     public isDropOff: boolean = false;
 
+    // Construction Limits
+    public maxBuilders: number = 3;
+    public currentBuilders: string[] = [];
+
     // ── Construction Progress ──────────────────────────────
     public progress: number = 0;
     public isUnderConstruction: boolean = true;
@@ -35,6 +39,22 @@ export abstract class BaseBuilding extends BaseEntity {
         // Initially hidden — shown only when 0 < progress < 100
         this.progressBarBg.setVisible(false);
         this.progressBarFill.setVisible(false);
+    }
+
+    public get availableBuilderSpots(): number {
+        return Math.max(0, this.maxBuilders - this.currentBuilders.length);
+    }
+
+    public addBuilder(workerId: string): boolean {
+        if (this.currentBuilders.length < this.maxBuilders && !this.currentBuilders.includes(workerId)) {
+            this.currentBuilders.push(workerId);
+            return true;
+        }
+        return false;
+    }
+
+    public removeBuilder(workerId: string) {
+        this.currentBuilders = this.currentBuilders.filter(id => id !== workerId);
     }
 
     /**
@@ -92,6 +112,7 @@ export abstract class BaseBuilding extends BaseEntity {
         this.isCompleted = true;
         this.isUnderConstruction = false;
         this.progress = 100;
+        this.currentBuilders = []; // Clear builders
         this.mainSprite.clearTint();
         this.setAlpha(1.0);
 

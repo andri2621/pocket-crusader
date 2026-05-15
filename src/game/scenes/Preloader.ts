@@ -67,6 +67,18 @@ export class Preloader extends Scene
             frameHeight: 192,
         });
 
+        // Idle Axe: 8 frames (192x192)
+        this.load.spritesheet('pawn-idle-axe', 'Units/Blue Units/Pawn/Pawn_Idle Axe.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Run Axe: 6 frames (192x192)
+        this.load.spritesheet('pawn-run-axe', 'Units/Blue Units/Pawn/Pawn_Run Axe.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
         // Idle while carrying wood: 8 frames (192x192)
         this.load.spritesheet('pawn-idle-wood', 'Units/Blue Units/Pawn/Pawn_Idle Wood.png', {
             frameWidth: 192,
