@@ -10,21 +10,33 @@ function BuildMenu({ wood }: { wood: number }) {
 
     if (!isOpen) return null;
 
-    const canAfford = wood >= 50;
+    const canAffordHut = wood >= 50;
+    const canAffordHouse = wood >= 30;
 
     return (
         <div className={styles.buildMenuOverlay} onClick={toggleMenu}>
             <div className={styles.buildMenuPanel} onClick={(e) => e.stopPropagation()}>
                 <h3 className={styles.buildMenuTitle}>Build</h3>
-                <button
-                    className={`${styles.buildCard} ${!canAfford ? styles.buildCardDisabled : ''}`}
-                    disabled={!canAfford}
-                    onClick={() => { if (canAfford) setPlacing('woodcutter_hut'); }}
-                >
-                    <span className={styles.buildCardIcon}>🏠</span>
-                    <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
-                    <span className={styles.buildCardCost}>🪵 50</span>
-                </button>
+                <div className={styles.buildCardList}>
+                    <button
+                        className={`${styles.buildCard} ${!canAffordHouse ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordHouse}
+                        onClick={() => { if (canAffordHouse) setPlacing('house'); }}
+                    >
+                        <span className={styles.buildCardIcon}>🏘️</span>
+                        <span className={styles.buildCardLabel}>House</span>
+                        <span className={styles.buildCardCost}>🪵 30</span>
+                    </button>
+                    <button
+                        className={`${styles.buildCard} ${!canAffordHut ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordHut}
+                        onClick={() => { if (canAffordHut) setPlacing('woodcutter_hut'); }}
+                    >
+                        <span className={styles.buildCardIcon}>🏠</span>
+                        <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
+                        <span className={styles.buildCardCost}>🪵 50</span>
+                    </button>
+                </div>
             </div>
         </div>
     );

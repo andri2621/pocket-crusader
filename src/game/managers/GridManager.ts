@@ -107,6 +107,19 @@ export class GridManager {
         return bestTile;
     }
 
+    /**
+     * Check if an entire rectangular area is available for building placement.
+     * Returns true only if ALL tiles in the area are within bounds and walkable.
+     */
+    public isAreaAvailable(col: number, row: number, width: number, height: number): boolean {
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                if (!this.isTileWalkable(col + c, row + r)) return false;
+            }
+        }
+        return true;
+    }
+
     // Coordinates helpers
     public getTileCenter(col: number, row: number) {
         return {

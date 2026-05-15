@@ -193,6 +193,12 @@
     text-align: center;
 }
 
+.buildCardList {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .buildCard {
     display: flex;
     align-items: center;

@@ -8,7 +8,6 @@ import { ResourceEntity } from '../entities/ResourceEntity';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { Stronghold } from '../entities/Stronghold';
 import { King } from '../entities/King';
-import { useGameStore } from '../../store/useGameStore';
 
 const MAP_WIDTH = GRID_COLS * TILE_SIZE;
 const MAP_HEIGHT = GRID_ROWS * TILE_SIZE;
@@ -23,9 +22,6 @@ export class GameScene extends Scene {
     private gridGraphics: Phaser.GameObjects.Graphics;
     private pinchStartDistance: number = 0;
     private pinchStartZoom: number = 1;
-
-    private isPlacingBuilding: string | null = null;
-    private ghostBuilding: Phaser.GameObjects.Image | null = null;
 
     constructor() {
         super('GameScene');
@@ -51,13 +47,14 @@ export class GameScene extends Scene {
         // 4. Setup Input
         this.input.addPointer(2);
         this.setupCameraInput();
+        this.setupKeyboard();
 
         EventBus.emit('current-scene-ready', this);
     }
 
     update(time: number, delta: number) {
         this.handlePinchZoom();
-        this.updateBuildingGhost();
+        this.interactionManager.updateGhost();
         this.gridManager.update();
         this.entityManager.update(time, delta);
     }
@@ -98,58 +95,19 @@ export class GameScene extends Scene {
         this.entityManager.addUnit(worker2);
     }
 
-    private updateBuildingGhost() {
-        const store = useGameStore.getState();
-        const placing = store.isPlacingBuilding;
+    // ── Keyboard Shortcuts ─────────────────────────────────────
 
-        if (placing !== this.isPlacingBuilding) {
-            this.isPlacingBuilding = placing;
-            if (placing) {
-                if (!this.ghostBuilding) {
-                    this.ghostBuilding = this.add.image(0, 0, 'house3').setOrigin(0.5, 0.83).setDepth(50).setAlpha(0.5);
-                }
-            } else if (this.ghostBuilding) {
-                this.ghostBuilding.destroy();
-                this.ghostBuilding = null;
+    private setupKeyboard() {
+        if (!this.input.keyboard) return;
+
+        // 'B' key — toggle build mode (House)
+        this.input.keyboard.on('keydown-B', () => {
+            if (this.interactionManager.isInBuildMode) {
+                this.interactionManager.exitBuildMode();
+            } else {
+                this.interactionManager.enterBuildMode('house');
             }
-        }
-
-        if (this.ghostBuilding && this.isPlacingBuilding) {
-            const pointer = this.input.activePointer;
-            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-            const grid = this.gridManager.pixelToGrid(worldPoint.x, worldPoint.y);
-            const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - 1));
-            const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - 1));
-
-            const pos = this.gridManager.getTileBottomCenter(snappedCol, snappedRow);
-            this.ghostBuilding.setPosition(pos.x, pos.y);
-
-            const valid = this.gridManager.isTileWalkable(snappedCol, snappedRow);
-            this.ghostBuilding.setTint(valid ? 0x00ff00 : 0xff0000);
-        }
-    }
-
-    public tryPlaceBuilding(col: number, row: number) {
-        if (!this.isPlacingBuilding) return;
-        if (!this.gridManager.isTileWalkable(col, row)) return;
-
-        const store = useGameStore.getState();
-        const BUILDING_COST_WOOD = 50;
-        if (store.wood < BUILDING_COST_WOOD) return;
-
-        store.addWood(-BUILDING_COST_WOOD);
-
-        const building = new BuildingEntity({
-            scene: this,
-            col, row,
-            texture: 'house3',
-            buildingType: 'woodcutter_hut'
         });
-
-        this.entityManager.addBuilding(building);
-        this.gridManager.blockTile(col, row);
-
-        store.setPlacingBuilding(null);
     }
 
     // --- Visuals & Input ---
@@ -181,6 +139,8 @@ export class GameScene extends Scene {
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
             if (!pointer.isDown) return;
             if (this.input.pointer1.isDown && this.input.pointer2.isDown) return;
+            // Don't pan camera while in build mode with pointer down (mobile drag)
+            if (this.interactionManager.isInBuildMode) return;
             this.cameras.main.scrollX -= (pointer.x - pointer.prevPosition.x) / this.cameras.main.zoom;
             this.cameras.main.scrollY -= (pointer.y - pointer.prevPosition.y) / this.cameras.main.zoom;
         });

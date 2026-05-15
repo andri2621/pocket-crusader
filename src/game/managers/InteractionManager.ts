@@ -1,12 +1,19 @@
 import { Scene } from 'phaser';
 import { EntityManager } from './EntityManager';
-import { GridManager } from './GridManager';
+import { GridManager, TILE_SIZE, GRID_COLS, GRID_ROWS } from './GridManager';
 import { BaseUnit } from '../entities/base/BaseUnit';
 import { BaseResource } from '../entities/base/BaseResource';
 import { BaseBuilding } from '../entities/base/BaseBuilding';
 import { Worker } from '../entities/Worker';
+import { House } from '../entities/House';
+import { BuildingEntity } from '../entities/BuildingEntity';
 import { useGameStore } from '../../store/useGameStore';
-import { GameScene } from '../scenes/GameScene';
+
+// Building definitions for ghost creation
+const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number }> = {
+    house: { texture: 'house1', width: 2, height: 2, cost: 30 },
+    woodcutter_hut: { texture: 'house3', width: 1, height: 1, cost: 50 },
+};
 
 export class InteractionManager {
     private scene: Scene;
@@ -15,6 +22,16 @@ export class InteractionManager {
     
     private selectedUnit: BaseUnit | null = null;
     private tapIndicator: Phaser.GameObjects.Graphics;
+
+    // ── Build Mode State ──────────────────────────────────────
+    private isBuildMode: boolean = false;
+    private buildType: string | null = null;
+    private ghostSprite: Phaser.GameObjects.Image | null = null;
+    private ghostOverlay: Phaser.GameObjects.Graphics | null = null;
+    private ghostGridCol: number = -1;
+    private ghostGridRow: number = -1;
+    private ghostValid: boolean = false;
+    private pointerDown: boolean = false;
 
     constructor(scene: Scene, entityManager: EntityManager, gridManager: GridManager) {
         this.scene = scene;
@@ -29,11 +46,271 @@ export class InteractionManager {
         });
 
         this.setupInput();
+        this.pollBuildModeFromStore();
     }
+
+    // ══════════════════════════════════════════════════════════
+    //  BUILD MODE — Ghost & Placement
+    // ══════════════════════════════════════════════════════════
+
+    /**
+     * Poll the Zustand store each frame to detect when React UI triggers build mode.
+     * Called from the scene's update loop.
+     */
+    private pollBuildModeFromStore() {
+        this.scene.events.on('update', () => {
+            const store = useGameStore.getState();
+            const placing = store.isPlacingBuilding;
+
+            if (placing && !this.isBuildMode) {
+                this.enterBuildMode(placing);
+            } else if (!placing && this.isBuildMode) {
+                this.exitBuildMode(false); // Store already cleared, don't re-clear
+            }
+        });
+    }
+
+    /**
+     * Enter build mode — create ghost sprite + overlay
+     */
+    public enterBuildMode(buildingType: string) {
+        if (this.isBuildMode) this.exitBuildMode();
+
+        const def = BUILDING_DEFS[buildingType];
+        if (!def) return;
+
+        this.isBuildMode = true;
+        this.buildType = buildingType;
+
+        // Deselect any selected unit
+        this.deselectUnit();
+
+        // Create ghost sprite
+        this.ghostSprite = this.scene.add.image(0, 0, def.texture);
+        this.ghostSprite.setAlpha(0.6);
+        this.ghostSprite.setDepth(50);
+        
+        // Origin depends on footprint size
+        if (def.width === 2 && def.height === 2) {
+            this.ghostSprite.setOrigin(0.5, 0.9);
+        } else {
+            this.ghostSprite.setOrigin(0.5, 0.83);
+        }
+
+        // Create footprint overlay graphics
+        this.ghostOverlay = this.scene.add.graphics();
+        this.ghostOverlay.setDepth(49);
+
+        // Hide until first pointer interaction
+        this.ghostSprite.setVisible(false);
+        this.ghostOverlay.setVisible(false);
+
+        // Sync store
+        const store = useGameStore.getState();
+        if (store.isPlacingBuilding !== buildingType) {
+            store.setPlacingBuilding(buildingType);
+        }
+    }
+
+    /**
+     * Exit build mode — destroy ghost, reset state
+     */
+    public exitBuildMode(clearStore: boolean = true) {
+        this.isBuildMode = false;
+        this.buildType = null;
+        this.ghostGridCol = -1;
+        this.ghostGridRow = -1;
+        this.ghostValid = false;
+        this.pointerDown = false;
+
+        if (this.ghostSprite) {
+            this.ghostSprite.destroy();
+            this.ghostSprite = null;
+        }
+        if (this.ghostOverlay) {
+            this.ghostOverlay.destroy();
+            this.ghostOverlay = null;
+        }
+
+        if (clearStore) {
+            useGameStore.getState().setPlacingBuilding(null);
+        }
+    }
+
+    /**
+     * Update ghost position and tint — called every frame from scene update
+     */
+    public updateGhost() {
+        if (!this.isBuildMode || !this.ghostSprite || !this.buildType) return;
+
+        const def = BUILDING_DEFS[this.buildType];
+        if (!def) return;
+
+        const pointer = this.scene.input.activePointer;
+        
+        // Desktop: always track mouse. Mobile: only track when pointer is down
+        const isMobile = !this.scene.sys.game.device.os.desktop;
+        if (isMobile && !this.pointerDown) return;
+
+        const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const grid = this.gridManager.pixelToGrid(worldPoint.x, worldPoint.y);
+        
+        // Clamp to grid bounds (accounting for footprint width/height)
+        const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - def.width));
+        const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - def.height));
+
+        // Only recalculate if grid position changed
+        if (snappedCol !== this.ghostGridCol || snappedRow !== this.ghostGridRow) {
+            this.ghostGridCol = snappedCol;
+            this.ghostGridRow = snappedRow;
+
+            // Check area availability
+            this.ghostValid = this.gridManager.isAreaAvailable(snappedCol, snappedRow, def.width, def.height);
+
+            // Update ghost sprite position
+            if (def.width === 2 && def.height === 2) {
+                // 2x2: center at middle of 2-tile width, bottom of 2-tile height
+                this.ghostSprite!.setPosition(
+                    snappedCol * TILE_SIZE + TILE_SIZE,       // center of 2 tiles
+                    snappedRow * TILE_SIZE + TILE_SIZE * 2    // bottom of 2 tiles
+                );
+            } else {
+                // 1x1: standard bottom-center
+                const pos = this.gridManager.getTileBottomCenter(snappedCol, snappedRow);
+                this.ghostSprite!.setPosition(pos.x, pos.y);
+            }
+
+            // Tint ghost sprite
+            const tintColor = this.ghostValid ? 0x00ff00 : 0xff0000;
+            this.ghostSprite!.setTint(tintColor);
+
+            // Draw footprint overlay
+            this.drawFootprintOverlay(snappedCol, snappedRow, def.width, def.height, this.ghostValid);
+        }
+
+        // Ensure visible
+        this.ghostSprite!.setVisible(true);
+        this.ghostOverlay!.setVisible(true);
+    }
+
+    /**
+     * Draw a colored rectangle overlay on the grid tiles to visualize the footprint area.
+     */
+    private drawFootprintOverlay(col: number, row: number, width: number, height: number, valid: boolean) {
+        if (!this.ghostOverlay) return;
+
+        this.ghostOverlay.clear();
+
+        const fillColor = valid ? 0x00ff00 : 0xff0000;
+        const fillAlpha = 0.25;
+        const strokeColor = valid ? 0x00ff00 : 0xff0000;
+        const strokeAlpha = 0.8;
+
+        // Fill the entire footprint area
+        this.ghostOverlay.fillStyle(fillColor, fillAlpha);
+        this.ghostOverlay.fillRect(
+            col * TILE_SIZE, row * TILE_SIZE,
+            width * TILE_SIZE, height * TILE_SIZE
+        );
+
+        // Stroke individual tiles for clarity
+        this.ghostOverlay.lineStyle(2, strokeColor, strokeAlpha);
+        for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width; c++) {
+                this.ghostOverlay.strokeRect(
+                    (col + c) * TILE_SIZE + 1,
+                    (row + r) * TILE_SIZE + 1,
+                    TILE_SIZE - 2,
+                    TILE_SIZE - 2
+                );
+            }
+        }
+    }
+
+    /**
+     * Attempt to place the building at the current ghost position.
+     * Returns true if placement succeeded.
+     */
+    private tryPlaceBuilding(): boolean {
+        if (!this.isBuildMode || !this.buildType || !this.ghostValid) return false;
+
+        const def = BUILDING_DEFS[this.buildType];
+        if (!def) return false;
+
+        const col = this.ghostGridCol;
+        const row = this.ghostGridRow;
+
+        // Check cost
+        const store = useGameStore.getState();
+        if (store.wood < def.cost) return false;
+
+        // Deduct cost
+        store.addWood(-def.cost);
+
+        // Create building entity
+        if (this.buildType === 'house') {
+            const house = new House({ scene: this.scene, col, row, texture: 'house1' });
+            this.entityManager.addBuilding(house);
+        } else if (this.buildType === 'woodcutter_hut') {
+            const hut = new BuildingEntity({
+                scene: this.scene, col, row,
+                texture: 'house3',
+                buildingType: 'woodcutter_hut'
+            });
+            this.entityManager.addBuilding(hut);
+        }
+
+        // Block tiles in grid
+        this.gridManager.blockArea(col, row, def.width, def.height);
+
+        // Exit build mode
+        this.exitBuildMode();
+        return true;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  INPUT HANDLING
+    // ══════════════════════════════════════════════════════════
 
     private setupInput() {
         const TAP_THRESHOLD = 10;
+
+        // ── Pointer Down ──
+        this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+            // Right-click to cancel build mode (button === 2)
+            if (pointer.button === 2 && this.isBuildMode) {
+                this.exitBuildMode();
+                return;
+            }
+
+            if (this.isBuildMode && pointer.button === 0) {
+                this.pointerDown = true;
+                // On mobile, show ghost immediately at tap location
+                this.updateGhost();
+            }
+        });
+
+        // ── Pointer Move ──
+        this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+            if (this.isBuildMode) {
+                // Ghost tracking is handled in updateGhost() called from scene update
+                // For mobile drag: if pointer is down, mark for update
+                return;
+            }
+        });
+
+        // ── Pointer Up ──
         this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+            if (this.isBuildMode) {
+                if (pointer.button === 0) {
+                    // Try to place the building
+                    this.tryPlaceBuilding();
+                    this.pointerDown = false;
+                }
+                return; // Block ALL other interactions during build mode
+            }
+
+            // Normal interaction — only if NOT in build mode
             const distance = Phaser.Math.Distance.Between(
                 pointer.downX, pointer.downY,
                 pointer.upX, pointer.upY
@@ -43,20 +320,17 @@ export class InteractionManager {
                 this.handleTap(pointer);
             }
         });
+
+        // Disable context menu on the canvas to allow right-click
+        this.scene.game.canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
     }
 
     private handleTap(pointer: Phaser.Input.Pointer) {
-        // 0. Intercept Building Placement
-        const store = useGameStore.getState();
-        if (store.isPlacingBuilding) {
-            const worldX = pointer.worldX;
-            const worldY = pointer.worldY;
-            const targetPos = this.gridManager.pixelToGrid(worldX, worldY);
-            if (this.scene instanceof GameScene) {
-                (this.scene as GameScene).tryPlaceBuilding(targetPos.col, targetPos.row);
-            }
-            return;
-        }
+        // Build mode taps are handled in pointerup above — we should never reach here in build mode
+        // But double-check just in case
+        if (this.isBuildMode) return;
 
         // 1. Hit Test UI / Scene Elements
         const hitObjects = this.scene.input.hitTestPointer(pointer);
@@ -122,7 +396,6 @@ export class InteractionManager {
             const worker = this.selectedUnit as Worker;
             const building = hitBuilding;
 
-            // Optional: Check if the worker is carrying wood or just want to walk to the building
             this.showTapIndicator(building.gridX, building.gridY);
             
             const startPos = { col: worker.gridX, row: worker.gridY };
@@ -250,5 +523,10 @@ export class InteractionManager {
                 }
             });
         }
+    }
+
+    // ── Public getters ──
+    public get isInBuildMode(): boolean {
+        return this.isBuildMode;
     }
 }
