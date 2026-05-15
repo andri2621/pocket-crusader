@@ -72,6 +72,7 @@ export class GameScene extends Scene
 
     // ── Tree Tracking ───────────────────────────────────────
     private treeSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
+    private stumps: Phaser.GameObjects.Image[] = [];
 
     // ── Buildings ────────────────────────────────────────────
     private buildings: { type: string; sprite: Phaser.GameObjects.Image; col: number; row: number }[] = [];
@@ -138,6 +139,18 @@ export class GameScene extends Scene
         this.handlePinchZoom();
         this.drawSelectionRing();
         this.updateBuildingGhost();
+
+        // ── Y-Sorting ──────────────────────────────────────────
+        if (this.worker) this.worker.setDepth(this.worker.y);
+        for (const [_, tree] of this.treeSprites) {
+            tree.setDepth(tree.y);
+        }
+        for (const building of this.buildings) {
+            building.sprite.setDepth(building.sprite.y);
+        }
+        for (const stump of this.stumps) {
+            stump.setDepth(stump.y);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -361,14 +374,25 @@ export class GameScene extends Scene
         {
             if (obs.row >= 0 && obs.row < GRID_ROWS && obs.col >= 0 && obs.col < GRID_COLS)
             {
-                const pos = this.gridToPixel(obs.col, obs.row);
+                const pos = this.getTileBottom(obs.col, obs.row);
 
-                // Tree sprite is 192x256 — anchor it to sit on the tile
-                // Center horizontally, but offset vertically so the trunk sits on the tile
-                const tree = this.add.sprite(pos.x, pos.y - 28, 'tree');
-                tree.setDisplaySize(TILE_SIZE * 1.2, TILE_SIZE * 1.6);
-                tree.setDepth(2);
+                // Tree frame: 192x256, origin (0.5, 0.95) → origin pixel (96, 243)
+                const tree = this.add.sprite(pos.x, pos.y, 'tree');
+                tree.setOrigin(0.5, 0.95);
+                tree.setScale(1.0);
                 tree.play('tree-sway');
+
+                // Perfect Hitbox Alignment (Fill the Box)
+                // Center X: 192/2 - 32 = 64. Y: 256*0.95 - 64 = 179.
+                tree.setInteractive(
+                    new Phaser.Geom.Rectangle(64, 179, 64, 64),
+                    Phaser.Geom.Rectangle.Contains
+                );
+                this.input.enableDebug(tree, 0xffff00); // Yellow debug box
+
+                // Save exact grid coordinate directly on the sprite
+                tree.setData('col', obs.col);
+                tree.setData('row', obs.row);
 
                 // Store reference for chopping interaction
                 this.treeSprites.set(`${obs.col},${obs.row}`, tree);
@@ -380,14 +404,36 @@ export class GameScene extends Scene
     //  WORKER
     // ═══════════════════════════════════════════════════════════
 
+    private getTileBottom (col: number, row: number): { x: number; y: number }
+    {
+        return {
+            x: (col * 64) + 32,
+            y: (row * 64) + 64, // Exact bottom line of the tile
+        };
+    }
+
     private placeWorker (): void
     {
-        const pixelPos = this.gridToPixel(this.workerGridX, this.workerGridY);
+        // Hard-sync: single source of truth for position
+        const center = this.getTileBottom(this.workerGridX, this.workerGridY);
 
-        this.worker = this.add.sprite(pixelPos.x, pixelPos.y, 'pawn-idle');
-        this.worker.setDisplaySize(TILE_SIZE, TILE_SIZE);
-        this.worker.setDepth(10);
-        this.worker.setInteractive({ useHandCursor: true });
+        this.worker = this.add.sprite(center.x, center.y, 'pawn-idle');
+        // Pawn frame: 192x192. The actual character is the exact center 64x64 square [64..128].
+        // To place visual feet on the bottom line, origin Y must be 128/192.
+        this.worker.setOrigin(0.5, 128 / 192);
+        this.worker.setScale(1.0);
+        
+        // Perfect Hitbox Alignment (Fill the Box)
+        // Center X is 64. Y goes from 64 to 128.
+        this.worker.setInteractive(
+            new Phaser.Geom.Rectangle(64, 64, 64, 64),
+            Phaser.Geom.Rectangle.Contains
+        );
+        if (this.worker.input) this.worker.input.cursor = 'pointer';
+
+        // Debug visualization for hitbox
+        this.input.enableDebug(this.worker, 0xff00ff);
+
         this.worker.play('pawn-idle');
         this.workerState = 'IDLE';
     }
@@ -505,10 +551,11 @@ export class GameScene extends Scene
         this.treeHealth.delete(key);
 
         // Place stump (tile stays blocked)
-        const pos = this.gridToPixel(col, row);
-        const stump = this.add.image(pos.x, pos.y + 8, 'stump');
-        stump.setDisplaySize(TILE_SIZE * 0.8, TILE_SIZE * 1.0);
-        stump.setDepth(2);
+        const pos = this.getTileBottom(col, row);
+        const stump = this.add.image(pos.x, pos.y, 'stump');
+        stump.setOrigin(0.5, 0.95);
+        stump.setScale(1.0);
+        this.stumps.push(stump);
 
         // Switch to carrying mode
         this.isCarrying = true;
@@ -613,16 +660,20 @@ export class GameScene extends Scene
             return;
         }
 
+        // Are we ALREADY at the adjacent tile?
+        if (this.workerGridX === adj.col && this.workerGridY === adj.row) {
+            this.startChopping(bestCol, bestRow);
+            return;
+        }
+
         this.easystar.findPath(
             this.workerGridX, this.workerGridY,
             adj.col, adj.row,
             (path) => {
-                if (path && path.length > 1) {
+                if (path && path.length > 0) {
                     this.moveAlongPath(path, () => {
                         this.startChopping(bestCol, bestRow);
                     });
-                } else if (path && path.length === 1) {
-                    this.startChopping(bestCol, bestRow);
                 } else {
                     this.setWorkerState('IDLE');
                 }
@@ -661,7 +712,8 @@ export class GameScene extends Scene
         const pulseAlpha = 0.5 + 0.3 * Math.sin(this.time.now / 200);
 
         this.selectionRing.lineStyle(2, 0x00ff00, pulseAlpha);
-        this.selectionRing.strokeCircle(x, y, TILE_SIZE / 2 + 2);
+        // Circle around feet anchor, adjusted slightly up so it doesn't bleed out of the bottom of the tile
+        this.selectionRing.strokeCircle(x, y - 16, 18);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -679,9 +731,11 @@ export class GameScene extends Scene
         const worldX = pointer.worldX;
         const worldY = pointer.worldY;
 
-        // Check if we tapped on the worker sprite
-        const hitWorker = this.worker.getBounds().contains(worldX, worldY);
+        // Use strict hitTest to check the custom hitboxes FIRST
+        const hitObjects = this.input.hitTestPointer(pointer);
+        const hitWorker = hitObjects.includes(this.worker);
 
+        // 1. Worker Selection Priority
         if (hitWorker) {
             if (this.selectedUnit === this.worker) {
                 this.deselectUnit();
@@ -692,34 +746,65 @@ export class GameScene extends Scene
             return;
         }
 
-        // Tapped on empty ground / obstacle
-        if (!this.selectedUnit) {
-            this.deselectUnit();
-            return;
-        }
+        let targetGridCol = -1;
+        let targetGridRow = -1;
 
-        // A unit IS selected — determine action
-        const gridPos = this.pixelToGrid(worldX, worldY);
+        // 2. Object Interaction Priority (Tree/Building)
+        if (hitObjects.length > 0) {
+            const hitObj = hitObjects[0] as Phaser.GameObjects.Sprite;
+            // Get true grid pos saved on the object (ignores precision errors from the bottom edge)
+            let targetCol = hitObj.getData('col');
+            let targetRow = hitObj.getData('row');
+            
+            // Fallback for objects that don't have col/row saved
+            if (targetCol === undefined) {
+                const objGridPos = this.pixelToGrid(hitObj.x, hitObj.y - 1); // -1 avoids snapping to row+1
+                targetCol = objGridPos.col;
+                targetRow = objGridPos.row;
+            }
+            
+            if (!this.selectedUnit) {
+                this.deselectUnit();
+                return; // Ignored object click if no unit selected
+            }
+            targetGridCol = targetCol;
+            targetGridRow = targetRow;
+        } else {
+            // 3. Ground Click
+            if (!this.selectedUnit) {
+                this.deselectUnit();
+                return;
+            }
+            const gridPos = this.pixelToGrid(worldX, worldY);
+            targetGridCol = gridPos.col;
+            targetGridRow = gridPos.row;
+        }
 
         // Bounds check
-        if (gridPos.col < 0 || gridPos.col >= GRID_COLS ||
-            gridPos.row < 0 || gridPos.row >= GRID_ROWS)
+        if (targetGridCol < 0 || targetGridCol >= GRID_COLS ||
+            targetGridRow < 0 || targetGridRow >= GRID_ROWS)
         {
             return;
         }
 
-        // ── Tapped on a TREE? → Navigate to adjacent tile & chop ──
-        if (this.walkGrid[gridPos.row][gridPos.col] === TILE_BLOCKED)
+        // ── Target is BLOCKED? → Navigate to adjacent tile & chop ──
+        if (this.walkGrid[targetGridRow][targetGridCol] === TILE_BLOCKED)
         {
-            const adjacentTile = this.findAdjacentWalkable(gridPos.col, gridPos.row);
+            const adjacentTile = this.findAdjacentWalkable(targetGridCol, targetGridRow);
             if (!adjacentTile) return;  // No walkable neighbor found
 
             // Cancel existing actions
             this.cancelMovement();
             this.cancelChopping();
 
-            // Show indicator on the tree
-            this.showTapIndicator(gridPos.col, gridPos.row);
+            // Show indicator on the object
+            this.showTapIndicator(targetGridCol, targetGridRow);
+
+            // Are we ALREADY at the best adjacent tile?
+            if (this.workerGridX === adjacentTile.col && this.workerGridY === adjacentTile.row) {
+                this.startChopping(targetGridCol, targetGridRow);
+                return;
+            }
 
             // Pathfind to the adjacent tile, then start chopping on arrival
             this.easystar.findPath(
@@ -728,13 +813,10 @@ export class GameScene extends Scene
                 adjacentTile.col,
                 adjacentTile.row,
                 (path) => {
-                    if (path && path.length > 1) {
+                    if (path && path.length > 0) {
                         this.moveAlongPath(path, () => {
-                            this.startChopping(gridPos.col, gridPos.row);
+                            this.startChopping(targetGridCol, targetGridRow);
                         });
-                    } else if (path && path.length === 1) {
-                        // Already adjacent
-                        this.startChopping(gridPos.col, gridPos.row);
                     }
                 }
             );
@@ -742,13 +824,13 @@ export class GameScene extends Scene
         }
 
         // ── Tapped on walkable ground → Move ──
-        if (gridPos.col === this.workerGridX && gridPos.row === this.workerGridY && !this.isMoving)
+        if (targetGridCol === this.workerGridX && targetGridRow === this.workerGridY && !this.isMoving)
         {
             return;
         }
 
         // Show tap indicator
-        this.showTapIndicator(gridPos.col, gridPos.row);
+        this.showTapIndicator(targetGridCol, targetGridRow);
 
         // Cancel existing actions (including auto-loop)
         this.cancelMovement();
@@ -760,8 +842,8 @@ export class GameScene extends Scene
         this.easystar.findPath(
             this.workerGridX,
             this.workerGridY,
-            gridPos.col,
-            gridPos.row,
+            targetGridCol,
+            targetGridRow,
             (path) => {
                 if (path && path.length > 1)
                 {
@@ -819,9 +901,14 @@ export class GameScene extends Scene
             this.currentTweenChain = null;
             this.isMoving = false;
 
-            // Snap to nearest grid position
-            this.workerGridX = Math.round((this.worker.x - TILE_SIZE / 2) / TILE_SIZE);
-            this.workerGridY = Math.round((this.worker.y - TILE_SIZE / 2) / TILE_SIZE);
+            // Snap to nearest grid position based on exact world offsets
+            // Since y is at the bottom edge (row*64 + 64), we subtract 1 pixel to stay in the cell safely
+            this.workerGridX = Math.floor(this.worker.x / 64);
+            this.workerGridY = Math.floor((this.worker.y - 1) / 64);
+
+            // Force visual snap so the hitbox and sprite perfectly align with the tile when movement is aborted
+            const snappedPos = this.getTileBottom(this.workerGridX, this.workerGridY);
+            this.worker.setPosition(snappedPos.x, snappedPos.y);
         }
     }
 
@@ -838,7 +925,7 @@ export class GameScene extends Scene
         for (let i = 1; i < path.length; i++)
         {
             const step = path[i];
-            const pixelPos = this.gridToPixel(step.x, step.y);
+            const bottom = this.getTileBottom(step.x, step.y);
 
             const prevStep = path[i - 1];
             const isDiagonal = (step.x !== prevStep.x) && (step.y !== prevStep.y);
@@ -846,8 +933,8 @@ export class GameScene extends Scene
 
             tweenConfigs.push({
                 targets: this.worker,
-                x: pixelPos.x,
-                y: pixelPos.y,
+                x: bottom.x,
+                y: bottom.y,
                 duration: duration,
                 ease: 'Linear',
                 onStart: () => {
@@ -927,7 +1014,8 @@ export class GameScene extends Scene
             if (placing) {
                 if (!this.ghostBuilding) {
                     this.ghostBuilding = this.add.image(0, 0, 'house3');
-                    this.ghostBuilding.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2.5);
+                    this.ghostBuilding.setOrigin(0.5, 0.83);
+                    this.ghostBuilding.setScale(1.0);
                     this.ghostBuilding.setDepth(50);
                     this.ghostBuilding.setAlpha(0.5);
                 }
@@ -945,16 +1033,15 @@ export class GameScene extends Scene
             const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
             const grid = this.pixelToGrid(worldPoint.x, worldPoint.y);
 
-            // Snap to 2x2 origin (top-left of the footprint)
-            const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - 2));
-            const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - 2));
+            // Snap to 1x1 footprint
+            const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - 1));
+            const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - 1));
 
-            // Center sprite on 2x2 area
-            const cx = snappedCol * TILE_SIZE + TILE_SIZE;
-            const cy = snappedRow * TILE_SIZE + TILE_SIZE;
-            this.ghostBuilding.setPosition(cx, cy - 8);
+            // Snap to 1x1 area bottom
+            const pos = this.getTileBottom(snappedCol, snappedRow);
+            this.ghostBuilding.setPosition(pos.x, pos.y);
 
-            // Validate 2x2 area
+            // Validate 1x1 area
             const valid = this.canPlaceBuilding(snappedCol, snappedRow);
             this.ghostBuilding.setTint(valid ? 0x00ff00 : 0xff0000);
         }
@@ -962,14 +1049,8 @@ export class GameScene extends Scene
 
     private canPlaceBuilding (col: number, row: number): boolean
     {
-        for (let dr = 0; dr < 2; dr++) {
-            for (let dc = 0; dc < 2; dc++) {
-                const r = row + dr;
-                const c = col + dc;
-                if (r >= GRID_ROWS || c >= GRID_COLS) return false;
-                if (this.walkGrid[r][c] !== TILE_WALKABLE) return false;
-            }
-        }
+        if (row >= GRID_ROWS || col >= GRID_COLS) return false;
+        if (this.walkGrid[row][col] !== TILE_WALKABLE) return false;
         return true;
     }
 
@@ -980,8 +1061,8 @@ export class GameScene extends Scene
     {
         const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
         const grid = this.pixelToGrid(worldPoint.x, worldPoint.y);
-        const col = Math.max(0, Math.min(grid.col, GRID_COLS - 2));
-        const row = Math.max(0, Math.min(grid.row, GRID_ROWS - 2));
+        const col = Math.max(0, Math.min(grid.col, GRID_COLS - 1));
+        const row = Math.max(0, Math.min(grid.row, GRID_ROWS - 1));
 
         if (!this.canPlaceBuilding(col, row)) return;
 
@@ -992,20 +1073,28 @@ export class GameScene extends Scene
         store.addWood(-BUILDING_COST_WOOD);
 
         // Place building sprite
-        const cx = col * TILE_SIZE + TILE_SIZE;
-        const cy = row * TILE_SIZE + TILE_SIZE;
-        const building = this.add.image(cx, cy - 8, 'house3');
-        building.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2.5);
-        building.setDepth(3);
+        const pos = this.getTileBottom(col, row);
+        // House3 image: 128x192, origin (0.5, 0.83) → origin pixel (64, 160)
+        const building = this.add.image(pos.x, pos.y, 'house3');
+        building.setOrigin(0.5, 0.83);
+        building.setScale(1.0);
+
+        // Perfect Hitbox Alignment (Fill the Box)
+        // Center X is 128/2 - 32 = 32. Y is 192*0.83 - 64 = 96.
+        building.setInteractive(
+            new Phaser.Geom.Rectangle(32, 96, 64, 64),
+            Phaser.Geom.Rectangle.Contains
+        );
+        this.input.enableDebug(building, 0x00ffff); // Cyan debug box
+
+        // Save exact grid coordinate directly on the sprite
+        building.setData('col', col);
+        building.setData('row', row);
 
         this.buildings.push({ type: 'woodcutter_hut', sprite: building, col, row });
 
-        // Block 2x2 area in walkGrid
-        for (let dr = 0; dr < 2; dr++) {
-            for (let dc = 0; dc < 2; dc++) {
-                this.walkGrid[row + dr][col + dc] = TILE_BLOCKED;
-            }
-        }
+        // Block 1x1 area in walkGrid
+        this.walkGrid[row][col] = TILE_BLOCKED;
         this.easystar.setGrid(this.walkGrid);
 
         // Exit placement mode
