@@ -8,8 +8,9 @@ import { useGameStore } from '../../store/useGameStore';
 
 export class Worker extends BaseUnit {
     private isCarrying: boolean = false;
-    private carriedWood: number = 0;
-    private chopTimer: Phaser.Time.TimerEvent | null = null;
+    public carriedResourceType: 'wood' | 'gold' | null = null;
+    public carriedAmount: number = 0;
+    private gatherTimer: Phaser.Time.TimerEvent | null = null;
     private targetResource: BaseResource | null = null;
 
     // ── Construction State ─────────────────────────────────
@@ -56,10 +57,10 @@ export class Worker extends BaseUnit {
     }
 
     protected override onStateChange(newState: WorkerState): void {
-        // Stop phantom chopping if we change state away from CHOPPING
-        if (newState !== 'CHOPPING' && this.chopTimer) {
-            this.chopTimer.destroy();
-            this.chopTimer = null;
+        // Stop phantom gathering if we change state away from CHOPPING or MINING
+        if (newState !== 'CHOPPING' && newState !== 'MINING' && this.gatherTimer) {
+            this.gatherTimer.destroy();
+            this.gatherTimer = null;
             this.targetResource = null;
         }
 
@@ -79,10 +80,17 @@ export class Worker extends BaseUnit {
             case 'IDLE':
                 if (this.isConstructionJob) {
                     this.mainSprite.play('pawn-idle-hammer');
-                } else if (this.isCarrying) {
+                } else if (this.isCarrying && this.carriedResourceType === 'wood') {
                     this.mainSprite.play('pawn-idle-wood');
+                } else if (this.isCarrying && this.carriedResourceType === 'gold') {
+                    this.mainSprite.play('pawn-idle-gold');
                 } else if (this.assignedHut) {
-                    this.mainSprite.play('pawn-idle-axe');
+                    // Check hut type if we have multiple hut types later, for now axe/pickaxe
+                    if (this.assignedHut.buildingType === 'gold_hut') {
+                        this.mainSprite.play('pawn-idle-pickaxe');
+                    } else {
+                        this.mainSprite.play('pawn-idle-axe');
+                    }
                 } else {
                     this.mainSprite.play('pawn-idle');
                 }
@@ -90,10 +98,16 @@ export class Worker extends BaseUnit {
             case 'MOVING':
                 if (this.isConstructionJob) {
                     this.mainSprite.play('pawn-run-hammer');
-                } else if (this.isCarrying) {
+                } else if (this.isCarrying && this.carriedResourceType === 'wood') {
                     this.mainSprite.play('pawn-run-wood');
+                } else if (this.isCarrying && this.carriedResourceType === 'gold') {
+                    this.mainSprite.play('pawn-run-gold');
                 } else if (this.assignedHut) {
-                    this.mainSprite.play('pawn-run-axe');
+                    if (this.assignedHut.buildingType === 'gold_hut') {
+                        this.mainSprite.play('pawn-run-pickaxe');
+                    } else {
+                        this.mainSprite.play('pawn-run-axe');
+                    }
                 } else {
                     this.mainSprite.play('pawn-run');
                 }
@@ -101,11 +115,16 @@ export class Worker extends BaseUnit {
             case 'CHOPPING':
                 this.mainSprite.play('pawn-chop');
                 break;
-            case 'CARRYING':
-                this.mainSprite.play('pawn-idle-wood');
+            case 'MINING':
+                this.mainSprite.play('pawn-mine');
                 break;
+            case 'CARRYING':
             case 'DEPOSITING':
-                this.mainSprite.play('pawn-idle-wood');
+                if (this.carriedResourceType === 'gold') {
+                    this.mainSprite.play('pawn-idle-gold');
+                } else {
+                    this.mainSprite.play('pawn-idle-wood');
+                }
                 break;
             case 'CONSTRUCTING':
                 this.mainSprite.play('pawn-build');
@@ -114,19 +133,30 @@ export class Worker extends BaseUnit {
     }
 
     // ══════════════════════════════════════════════════════════
-    //  CHOPPING (Resource Gathering)
+    //  RESOURCE GATHERING (Chopping / Mining)
     // ══════════════════════════════════════════════════════════
 
-    public startChopping(resource: BaseResource): void {
+    public clearInventory(): void {
+        this.carriedAmount = 0;
+        this.carriedResourceType = null;
+        this.isCarrying = false;
+    }
+
+    public startGathering(resource: BaseResource): void {
         // Cancel any construction job
         this.cancelBuilding();
 
-        if (this.chopTimer) {
-            this.chopTimer.destroy();
+        // If carrying a different resource type, drop it
+        if (this.isCarrying && this.carriedResourceType !== resource.resourceType) {
+            this.clearInventory();
+        }
+
+        if (this.gatherTimer) {
+            this.gatherTimer.destroy();
         }
         
         this.targetResource = resource;
-        this.setWorkerState('CHOPPING');
+        this.setWorkerState(resource.resourceType === 'gold' ? 'MINING' : 'CHOPPING');
         
         // Face the resource
         if (resource.gridX < this.gridX) {
@@ -135,26 +165,37 @@ export class Worker extends BaseUnit {
             this.mainSprite.setFlipX(false);
         }
 
-        this.chopTimer = this.scene.time.addEvent({
-            delay: 2000, // CHOP_INTERVAL
+        this.gatherTimer = this.scene.time.addEvent({
+            delay: 2000, // GATHER_INTERVAL
             loop: true,
             callback: () => {
                 if (!this.targetResource) return;
                 
                 this.targetResource.takeDamage(1);
-                this.carriedWood += this.targetResource.yieldPerHit;
+                this.carriedAmount += this.targetResource.yieldPerHit;
+                this.carriedResourceType = this.targetResource.resourceType as 'wood' | 'gold';
                 
-                if (this.targetResource.currentHealth <= 0) {
+                // Stop gathering if resource depleted OR inventory full (e.g., 10 capacity)
+                if (this.targetResource.currentHealth <= 0 || this.carriedAmount >= 10) {
                     this.collectResource();
                 }
             }
         });
     }
 
+    // For backwards compatibility with external calls, though we can use startGathering directly
+    public startChopping(resource: BaseResource): void {
+        this.startGathering(resource);
+    }
+    
+    public startMining(resource: BaseResource): void {
+        this.startGathering(resource);
+    }
+
     private collectResource(): void {
-        if (this.chopTimer) {
-            this.chopTimer.destroy();
-            this.chopTimer = null;
+        if (this.gatherTimer) {
+            this.gatherTimer.destroy();
+            this.gatherTimer = null;
         }
         this.targetResource = null;
         this.isCarrying = true;
@@ -165,11 +206,13 @@ export class Worker extends BaseUnit {
     }
 
     public depositResource(): void {
-        if (this.carriedWood > 0) {
-            // Using Zustand store directly as per integration requirement
-            useGameStore.getState().addWood(this.carriedWood);
-            this.carriedWood = 0;
-            this.isCarrying = false;
+        if (this.carriedAmount > 0) {
+            if (this.carriedResourceType === 'wood') {
+                useGameStore.getState().addWood(this.carriedAmount);
+            } else if (this.carriedResourceType === 'gold') {
+                useGameStore.getState().addGold(this.carriedAmount);
+            }
+            this.clearInventory();
         }
         this.setWorkerState('IDLE');
     }
@@ -183,10 +226,10 @@ export class Worker extends BaseUnit {
      * Worker must already be adjacent to the building.
      */
     public startBuilding(building: BaseBuilding): void {
-        // Cancel any chopping
-        if (this.chopTimer) {
-            this.chopTimer.destroy();
-            this.chopTimer = null;
+        // Cancel any gathering
+        if (this.gatherTimer) {
+            this.gatherTimer.destroy();
+            this.gatherTimer = null;
             this.targetResource = null;
         }
 

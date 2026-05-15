@@ -188,7 +188,9 @@ export class EntityManager {
         }
 
         // PRIORITY 2: Hut Automation
-        const completedHuts = this.buildings.filter(b => b.buildingType === 'woodcutter_hut' && b.isCompleted) as BuildingEntity[];
+        const completedHuts = this.buildings.filter(b => 
+            (b.buildingType === 'woodcutter_hut' || b.buildingType === 'gold_hut') && b.isCompleted
+        ) as any[];
 
         for (const hut of completedHuts) {
             let needed = Math.max(0, hut.maxWorkers - hut.assignedWorkers.length);
@@ -247,9 +249,9 @@ export class EntityManager {
     }
 
     /**
-     * Dispatch a worker to automate a Woodcutter's Hut.
+     * Dispatch a worker to automate a Woodcutter's or Gold Hut.
      */
-    public dispatchWorkerToHut(worker: Worker, hut: BuildingEntity) {
+    public dispatchWorkerToHut(worker: Worker, hut: any) {
         const startPos = { col: worker.gridX, row: worker.gridY };
         const adjTile = this.findAdjacentToBuilding(hut, startPos);
         if (!adjTile) return;
@@ -275,37 +277,38 @@ export class EntityManager {
         }
     }
 
-    public handleHutAutomationLoop(worker: Worker, hut: BuildingEntity) {
+    public handleHutAutomationLoop(worker: Worker, hut: any) {
         if (worker.assignedHut !== hut) return;
         
         const currentPos = { col: worker.gridX, row: worker.gridY };
         
-        // Smart Tree Selection: Get all trees, sort by distance, pick random from top 3
-        const validTrees = this.resources.filter(r => r.resourceType === 'wood' && r.currentHealth > 0);
-        validTrees.sort((a, b) => {
+        // Smart Resource Selection: Get all trees/stones, sort by distance, pick random from top 3
+        const targetResourceType = hut.buildingType === 'gold_hut' ? 'gold' : 'wood';
+        const validResources = this.resources.filter(r => r.resourceType === targetResourceType && r.currentHealth > 0);
+        validResources.sort((a, b) => {
             const distA = Math.abs(a.gridX - hut.gridX) + Math.abs(a.gridY - hut.gridY);
             const distB = Math.abs(b.gridX - hut.gridX) + Math.abs(b.gridY - hut.gridY);
             return distA - distB;
         });
 
-        const topTrees = validTrees.slice(0, 3);
-        if (topTrees.length === 0) {
+        const topResources = validResources.slice(0, 3);
+        if (topResources.length === 0) {
             worker.setWorkerState('IDLE');
             return;
         }
 
-        const tree = topTrees[Math.floor(Math.random() * topTrees.length)];
+        const resource = topResources[Math.floor(Math.random() * topResources.length)];
 
         // Stand Positions: Pick a random adjacent tile so workers don't overlap on the same spot
-        const treeAdj = this.gridManager.getRandomAdjacentWalkable(tree.gridX, tree.gridY) || 
-                        this.gridManager.findAdjacentWalkable(tree.gridX, tree.gridY, currentPos);
+        const resourceAdj = this.gridManager.getRandomAdjacentWalkable(resource.gridX, resource.gridY) || 
+                        this.gridManager.findAdjacentWalkable(resource.gridX, resource.gridY, currentPos);
 
-        if (treeAdj) {
-            this.gridManager.findPath(currentPos, treeAdj, (path) => {
+        if (resourceAdj) {
+            this.gridManager.findPath(currentPos, resourceAdj, (path) => {
                 if (path && worker.assignedHut === hut) {
                     worker.moveAlongPath(path, () => {
                         if (worker.assignedHut === hut) {
-                            worker.startChopping(tree);
+                            worker.startGathering(resource);
                         }
                     });
                 }
@@ -382,10 +385,10 @@ export class EntityManager {
     }
 
     /**
-     * Find the nearest building that accepts resource drop-offs.
+     * Find the nearest building that accepts a specific resource drop-off.
      */
-    public getNearestDropOff(fromPos: GridPosition): BaseBuilding | undefined {
-        const matching = this.buildings.filter(b => b.isDropOff && b.isCompleted);
+    public getNearestDropOff(fromPos: GridPosition, resourceType: string): BaseBuilding | undefined {
+        const matching = this.buildings.filter(b => b.isDropOff && b.isCompleted && b.acceptedResources.includes(resourceType));
         if (matching.length === 0) return undefined;
 
         let nearest = matching[0];

@@ -6,6 +6,7 @@ export abstract class BaseBuilding extends BaseEntity {
     public footprint: { width: number; height: number };
     public isCompleted: boolean = false;
     public isDropOff: boolean = false;
+    public acceptedResources: string[] = ['wood', 'gold', 'stone'];
 
     // Construction Limits
     public maxBuilders: number = 2;

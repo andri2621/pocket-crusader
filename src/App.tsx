@@ -36,6 +36,15 @@ function BuildMenu({ wood }: { wood: number }) {
                         <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
                         <span className={styles.buildCardCost}>🪵 50</span>
                     </button>
+                    <button
+                        className={`${styles.buildCard} ${!canAffordHut ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordHut}
+                        onClick={() => { if (canAffordHut) setPlacing('gold_hut'); }}
+                    >
+                        <span className={styles.buildCardIcon}>⛏️</span>
+                        <span className={styles.buildCardLabel}>Gold Hut</span>
+                        <span className={styles.buildCardCost}>🪵 50</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -47,6 +56,7 @@ function App() {
     const [hasStarted, setHasStarted] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const wood = useGameStore((state) => state.wood);
+    const gold = useGameStore((state) => state.gold);
     const currentPop = useGameStore((state) => state.currentPopulation);
     const maxPop = useGameStore((state) => state.maxPopulation);
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
@@ -145,6 +155,10 @@ function App() {
                             <div className={styles.hudItem}>
                                 <span className={styles.hudIcon}>🪵</span>
                                 <span className={styles.hudValue}>{wood}</span>
+                            </div>
+                            <div className={styles.hudItem} style={{ marginLeft: '12px' }}>
+                                <span className={styles.hudIcon}>💰</span>
+                                <span className={styles.hudValue}>{gold}</span>
                             </div>
                         </div>
 

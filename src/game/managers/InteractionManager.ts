@@ -7,12 +7,14 @@ import { BaseBuilding } from '../entities/base/BaseBuilding';
 import { Worker } from '../entities/Worker';
 import { House } from '../entities/House';
 import { BuildingEntity } from '../entities/BuildingEntity';
+import { GoldHut } from '../entities/GoldHut';
 import { useGameStore } from '../../store/useGameStore';
 
 // Building definitions for ghost creation
 const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number }> = {
     house: { texture: 'house1', width: 2, height: 2, cost: 30 },
     woodcutter_hut: { texture: 'house3', width: 1, height: 1, cost: 50 },
+    gold_hut: { texture: 'gold_hut', width: 1, height: 1, cost: 50 },
 };
 
 export class InteractionManager {
@@ -206,6 +208,13 @@ export class InteractionManager {
                 buildingType: 'woodcutter_hut'
             });
             this.entityManager.addBuilding(hut);
+        } else if (this.buildType === 'gold_hut') {
+            const hut = new GoldHut({
+                scene: this.scene, col, row,
+                texture: 'gold_hut',
+                buildingType: 'gold_hut'
+            });
+            this.entityManager.addBuilding(hut);
         }
 
         this.gridManager.blockArea(col, row, def.width, def.height);
@@ -296,7 +305,8 @@ export class InteractionManager {
 
             this.showTapIndicator(resource.gridX, resource.gridY);
             
-            if (worker.isCarryingWood) {
+            // If already carrying the same resource type, maybe full, so go deposit then come back to gather this
+            if (worker.carriedAmount > 0 && worker.carriedResourceType === resource.resourceType) {
                 this.handleResourceCollected(worker, resource);
                 return;
             }
@@ -309,14 +319,14 @@ export class InteractionManager {
             const isAdjacent = Math.abs(worker.gridX - resource.gridX) <= 1 && Math.abs(worker.gridY - resource.gridY) <= 1;
 
             if (isAdjacent) {
-                worker.startChopping(resource);
+                worker.startGathering(resource);
             } else {
                 const adjTile = this.gridManager.findAdjacentWalkable(resource.gridX, resource.gridY, startPos);
                 if (adjTile) {
                     this.gridManager.findPath(startPos, adjTile, (path) => {
                         if (path) {
                             worker.moveAlongPath(path, () => {
-                                worker.startChopping(resource);
+                                worker.startGathering(resource);
                             });
                         }
                     });
@@ -351,21 +361,23 @@ export class InteractionManager {
                     this.gridManager.findPath(startPos, adjTile, (path) => {
                         if (path) {
                             worker.moveAlongPath(path, () => {
-                                if (worker.isCarryingWood) {
+                                if (worker.carriedAmount > 0) {
                                     worker.depositResource();
                                 }
                                 
-                                // Auto-chop loop: Find the nearest tree and chop it
+                                // Auto-gather loop: Find the nearest resource matching the drop-off
                                 const currentPos = { col: worker.gridX, row: worker.gridY };
-                                const nearestTree = this.entityManager.getNearestResource(currentPos, 'wood');
+                                // Prioritize gold if it's a gold hut, else wood (since strongholds accept all, we default to wood unless they were mining)
+                                const targetResourceType = building.buildingType === 'gold_hut' ? 'gold' : 'wood';
+                                const nearestResource = this.entityManager.getNearestResource(currentPos, targetResourceType);
                                 
-                                if (nearestTree) {
-                                    const treeAdj = this.gridManager.findAdjacentWalkable(nearestTree.gridX, nearestTree.gridY, currentPos);
-                                    if (treeAdj) {
-                                        this.gridManager.findPath(currentPos, treeAdj, (treePath) => {
-                                            if (treePath) {
-                                                worker.moveAlongPath(treePath, () => {
-                                                    worker.startChopping(nearestTree);
+                                if (nearestResource) {
+                                    const resAdj = this.gridManager.findAdjacentWalkable(nearestResource.gridX, nearestResource.gridY, currentPos);
+                                    if (resAdj) {
+                                        this.gridManager.findPath(currentPos, resAdj, (resPath) => {
+                                            if (resPath) {
+                                                worker.moveAlongPath(resPath, () => {
+                                                    worker.startGathering(nearestResource);
                                                 });
                                             }
                                         });
@@ -461,11 +473,12 @@ export class InteractionManager {
      * Handle resource collection: find nearest DROP-OFF building (isDropOff=true) to deposit.
      * Uses isDropOff flag instead of hardcoded building type.
      */
-    private handleResourceCollected(worker: Worker, nextTargetTree?: BaseResource) {
+    private handleResourceCollected(worker: Worker, nextTargetResource?: BaseResource) {
         const currentPos = { col: worker.gridX, row: worker.gridY };
+        const rType = worker.carriedResourceType || 'wood';
         
         // Find nearest drop-off point, prioritizing assigned hut if automating
-        const dropOff = worker.assignedHut || this.entityManager.getNearestDropOff(currentPos);
+        const dropOff = worker.assignedHut || this.entityManager.getNearestDropOff(currentPos, rType);
         if (!dropOff) return;
 
         const adjTile = this.gridManager.findAdjacentWalkable(dropOff.gridX, dropOff.gridY, currentPos);
@@ -475,16 +488,16 @@ export class InteractionManager {
                     worker.moveAlongPath(path, () => {
                         worker.depositResource();
 
-                        // Auto-chop loop: Find the next tree to chop
-                        const treeToChop = nextTargetTree || this.entityManager.getNearestResource({ col: worker.gridX, row: worker.gridY }, 'wood');
-                        if (treeToChop) {
+                        // Auto-gather loop: Find the next resource
+                        const resToGather = nextTargetResource || this.entityManager.getNearestResource({ col: worker.gridX, row: worker.gridY }, rType);
+                        if (resToGather) {
                             const newStart = { col: worker.gridX, row: worker.gridY };
-                            const treeAdj = this.gridManager.findAdjacentWalkable(treeToChop.gridX, treeToChop.gridY, newStart);
-                            if (treeAdj) {
-                                this.gridManager.findPath(newStart, treeAdj, (treePath) => {
-                                    if (treePath) {
-                                        worker.moveAlongPath(treePath, () => {
-                                            worker.startChopping(treeToChop);
+                            const resAdj = this.gridManager.findAdjacentWalkable(resToGather.gridX, resToGather.gridY, newStart);
+                            if (resAdj) {
+                                this.gridManager.findPath(newStart, resAdj, (resPath) => {
+                                    if (resPath) {
+                                        worker.moveAlongPath(resPath, () => {
+                                            worker.startGathering(resToGather);
                                         });
                                     }
                                 });

@@ -4,11 +4,12 @@ export type WorkerState =
     | "CHOPPING"
     | "CARRYING"
     | "DEPOSITING"
-    | "CONSTRUCTING";
+    | "CONSTRUCTING"
+    | "MINING";
 
 export type ResourceType = "wood" | "gold" | "stone";
 
-export type BuildingType = "castle" |"woodcutter_hut" | "house" | "tower";
+export type BuildingType = "castle" |"woodcutter_hut" | "house" | "tower" | "gold_hut";
 
 export interface GridPosition {
     col: number;

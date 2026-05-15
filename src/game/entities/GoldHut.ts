@@ -1,19 +1,22 @@
 import { BaseBuilding } from './base/BaseBuilding';
 import { BuildingConfig } from '../../types/entity.types';
 
-export class BuildingEntity extends BaseBuilding {
+export class GoldHut extends BaseBuilding {
     public maxWorkers: number = 2;
     public assignedWorkers: string[] = [];
     private occupancyLabel: Phaser.GameObjects.Text;
 
     constructor(config: BuildingConfig) {
-        super(config);
+        super({
+            ...config,
+            buildingType: 'gold_hut'
+        });
         
         // Only becomes a drop-off when construction is complete
         this.isDropOff = false;
-        this.acceptedResources = ['wood'];
+        this.acceptedResources = ['gold'];
 
-        // Adjust origin based on house3 sprite specifics
+        // Adjust origin based on gold_hut sprite specifics
         this.mainSprite.setOrigin(0.5, 0.83);
 
         // Setup hitbox for Building in local container space.
@@ -44,6 +47,7 @@ export class BuildingEntity extends BaseBuilding {
         if (!this.isCompleted) return;
 
         if (!this.occupancyLabel) {
+            // Position above the roof
             this.occupancyLabel = this.scene.add.text(0, -90, '', {
                 fontFamily: 'Arial',
                 fontSize: '12px',

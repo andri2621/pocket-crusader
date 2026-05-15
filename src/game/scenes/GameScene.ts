@@ -5,6 +5,7 @@ import { EntityManager } from '../managers/EntityManager';
 import { InteractionManager } from '../managers/InteractionManager';
 import { Worker } from '../entities/Worker';
 import { ResourceEntity } from '../entities/ResourceEntity';
+import { GoldResource } from '../entities/GoldResource';
 import { Stronghold } from '../entities/Stronghold';
 import { King } from '../entities/King';
 
@@ -71,6 +72,21 @@ export class GameScene extends Scene {
                 resourceType: 'wood', maxHp: 3, yieldPerHit: 5
             });
             this.entityManager.addResource(tree);
+            this.gridManager.blockTile(obs.col, obs.row);
+        }
+
+        // Spawn Gold
+        const GOLD_TILES = [
+            { col: 10, row: 5 },
+            { col: 11, row: 5 },
+        ];
+
+        for (const obs of GOLD_TILES) {
+            const gold = new GoldResource({
+                scene: this, col: obs.col, row: obs.row, texture: 'gold_stone_6',
+                resourceType: 'gold', maxHp: 60, yieldPerHit: 10
+            });
+            this.entityManager.addResource(gold);
             this.gridManager.blockTile(obs.col, obs.row);
         }
 
@@ -173,9 +189,18 @@ export class GameScene extends Scene {
         this.anims.create({ key: 'pawn-idle-wood', frames: this.anims.generateFrameNumbers('pawn-idle-wood', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run-wood', frames: this.anims.generateFrameNumbers('pawn-run-wood', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
 
+        // ── Gold Carrying Animations ──
+        this.anims.create({ key: 'pawn-idle-gold', frames: this.anims.generateFrameNumbers('pawn-idle-gold', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
+        this.anims.create({ key: 'pawn-run-gold', frames: this.anims.generateFrameNumbers('pawn-run-gold', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+
         // ── Hammer / Construction Animations ──
         this.anims.create({ key: 'pawn-idle-hammer', frames: this.anims.generateFrameNumbers('pawn-idle-hammer', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run-hammer', frames: this.anims.generateFrameNumbers('pawn-run-hammer', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'pawn-build', frames: this.anims.generateFrameNumbers('pawn-build', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+
+        // ── Pickaxe / Mining Animations ──
+        this.anims.create({ key: 'pawn-idle-pickaxe', frames: this.anims.generateFrameNumbers('pawn-idle-pickaxe', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
+        this.anims.create({ key: 'pawn-run-pickaxe', frames: this.anims.generateFrameNumbers('pawn-run-pickaxe', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+        this.anims.create({ key: 'pawn-mine', frames: this.anims.generateFrameNumbers('pawn-mine', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
     }
 }
