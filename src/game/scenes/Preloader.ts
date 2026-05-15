@@ -63,6 +63,24 @@ export class Preloader extends Scene
             frameWidth: 192,
             frameHeight: 192,
         });
+
+        // Idle while carrying wood: 8 frames (192x192)
+        this.load.spritesheet('pawn-idle-wood', 'Units/Blue Units/Pawn/Pawn_Idle Wood.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Run while carrying wood: 6 frames (192x192)
+        this.load.spritesheet('pawn-run-wood', 'Units/Blue Units/Pawn/Pawn_Run Wood.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // ── Buildings ───────────────────────────────────────
+        this.load.image('house3', 'Buildings/Blue Buildings/House3.png');
+
+        // ── Terrain Props ───────────────────────────────────
+        this.load.image('stump', 'Terrain/Resources/Wood/Trees/Stump 1.png');
     }
 
     create ()

@@ -3,11 +3,39 @@ import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
 import { useGameStore } from "./store/useGameStore";
 import styles from "./styles/App.module.css";
 
+function BuildMenu({ wood }: { wood: number }) {
+    const isOpen = useGameStore((s) => s.isBuildMenuOpen);
+    const toggleMenu = useGameStore((s) => s.toggleBuildMenu);
+    const setPlacing = useGameStore((s) => s.setPlacingBuilding);
+
+    if (!isOpen) return null;
+
+    const canAfford = wood >= 50;
+
+    return (
+        <div className={styles.buildMenuOverlay} onClick={toggleMenu}>
+            <div className={styles.buildMenuPanel} onClick={(e) => e.stopPropagation()}>
+                <h3 className={styles.buildMenuTitle}>Build</h3>
+                <button
+                    className={`${styles.buildCard} ${!canAfford ? styles.buildCardDisabled : ''}`}
+                    disabled={!canAfford}
+                    onClick={() => { if (canAfford) setPlacing('woodcutter_hut'); }}
+                >
+                    <span className={styles.buildCardIcon}>🏠</span>
+                    <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
+                    <span className={styles.buildCardCost}>🪵 50</span>
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [hasStarted, setHasStarted] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const wood = useGameStore((state) => state.wood);
+    const isPlacing = useGameStore((state) => state.isPlacingBuilding);
 
     useEffect(() => {
         const handleFullscreenChange = () => {
@@ -102,7 +130,20 @@ function App() {
                             <span className={styles.hudIcon}>🪵</span>
                             <span className={styles.hudValue}>{wood}</span>
                         </div>
+                        <button className={styles.hudBuildBtn} onClick={() => useGameStore.getState().toggleBuildMenu()}>
+                            🏠
+                        </button>
                     </div>
+
+                    {/* Placement Mode Indicator */}
+                    {isPlacing && (
+                        <div className={styles.placementBar}>
+                            Tap the map to place · <button onClick={() => useGameStore.getState().setPlacingBuilding(null)}>Cancel</button>
+                        </div>
+                    )}
+
+                    {/* Build Menu */}
+                    <BuildMenu wood={wood} />
                 </>
             )}
         </div>

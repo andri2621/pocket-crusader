@@ -139,3 +139,120 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.5px;
 }
+
+.hudBuildBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    pointer-events: auto;
+}
+
+.hudBuildBtn:hover {
+    background: rgba(251, 191, 36, 0.3);
+    border-color: #fbbf24;
+}
+
+/* ═══════════════════════════════════════════
+   BUILD MENU
+   ═══════════════════════════════════════════ */
+.buildMenuOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 80;
+}
+
+.buildMenuPanel {
+    background: rgba(30, 20, 15, 0.95);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 16px;
+    padding: 20px 28px;
+    min-width: 220px;
+}
+
+.buildMenuTitle {
+    margin: 0 0 16px;
+    color: #fbbf24;
+    font-family: 'Inter', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+}
+
+.buildCard {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: #e2e8f0;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+}
+
+.buildCard:hover:not(:disabled) {
+    background: rgba(251, 191, 36, 0.15);
+    border-color: #fbbf24;
+}
+
+.buildCardDisabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.buildCardIcon { font-size: 24px; }
+.buildCardLabel { flex: 1; font-weight: 600; text-align: left; }
+.buildCardCost { color: #fbbf24; font-weight: 700; }
+
+/* Placement mode bar */
+.placementBar {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 70;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 10px;
+    padding: 8px 20px;
+    color: #fbbf24;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    pointer-events: auto;
+}
+
+.placementBar button {
+    background: none;
+    border: 1px solid #fbbf24;
+    color: #fbbf24;
+    border-radius: 6px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-left: 6px;
+}
+
+.placementBar button:hover {
+    background: rgba(251, 191, 36, 0.2);
+}

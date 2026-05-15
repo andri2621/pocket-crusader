@@ -15,7 +15,13 @@ const TILE_WALKABLE = 0;
 const TILE_BLOCKED = 1;
 
 // ── Worker States ───────────────────────────────────────────────
-type WorkerState = 'IDLE' | 'MOVING' | 'CHOPPING';
+type WorkerState = 'IDLE' | 'MOVING' | 'CHOPPING' | 'CARRYING' | 'DEPOSITING';
+
+// ── Tree / Building Constants ───────────────────────────────────
+const TREE_MAX_HP = 3;
+const WOOD_PER_HIT = 5;
+const CHOP_INTERVAL = 2000;
+const BUILDING_COST_WOOD = 50;
 
 // ── Obstacle Layout ─────────────────────────────────────────────
 // L-shaped forest wall + small cluster for A* pathfinding testing
@@ -46,11 +52,19 @@ export class GameScene extends Scene
     private workerGridY: number = 2;
     private workerState: WorkerState = 'IDLE';
     private isMoving: boolean = false;
+    private isCarrying: boolean = false;
+    private carriedWood: number = 0;
     private currentTweenChain: Phaser.Tweens.TweenChain | null = null;
 
     // ── Chopping ────────────────────────────────────────────
     private chopTimer: Phaser.Time.TimerEvent | null = null;
     private chopTargetTree: Phaser.GameObjects.Sprite | null = null;
+    private chopTargetKey: string = '';
+    private lastChopTreeCol: number = -1;
+    private lastChopTreeRow: number = -1;
+
+    // ── Tree Health ─────────────────────────────────────────
+    private treeHealth: Map<string, number> = new Map();
 
     // ── Unit Selection ──────────────────────────────────────
     private selectedUnit: Phaser.GameObjects.Sprite | null = null;
@@ -58,6 +72,11 @@ export class GameScene extends Scene
 
     // ── Tree Tracking ───────────────────────────────────────
     private treeSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
+
+    // ── Buildings ────────────────────────────────────────────
+    private buildings: { type: string; sprite: Phaser.GameObjects.Image; col: number; row: number }[] = [];
+    private ghostBuilding: Phaser.GameObjects.Image | null = null;
+    private isPlacingBuilding: string | null = null;
 
     // ── Visual Feedback ─────────────────────────────────────
     private gridGraphics: Phaser.GameObjects.Graphics;
@@ -118,6 +137,7 @@ export class GameScene extends Scene
         this.easystar.calculate();
         this.handlePinchZoom();
         this.drawSelectionRing();
+        this.updateBuildingGhost();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -155,6 +175,22 @@ export class GameScene extends Scene
             key: 'tree-sway',
             frames: this.anims.generateFrameNumbers('tree', { start: 0, end: 7 }),
             frameRate: 4,
+            repeat: -1,
+        });
+
+        // Pawn Idle with Wood — 8 frames
+        this.anims.create({
+            key: 'pawn-idle-wood',
+            frames: this.anims.generateFrameNumbers('pawn-idle-wood', { start: 0, end: 7 }),
+            frameRate: 8,
+            repeat: -1,
+        });
+
+        // Pawn Run with Wood — 6 frames
+        this.anims.create({
+            key: 'pawn-run-wood',
+            frames: this.anims.generateFrameNumbers('pawn-run-wood', { start: 0, end: 5 }),
+            frameRate: 10,
             repeat: -1,
         });
     }
@@ -366,13 +402,19 @@ export class GameScene extends Scene
 
         switch (state) {
             case 'IDLE':
-                this.worker.play('pawn-idle');
+                this.worker.play(this.isCarrying ? 'pawn-idle-wood' : 'pawn-idle');
                 break;
             case 'MOVING':
-                this.worker.play('pawn-run');
+                this.worker.play(this.isCarrying ? 'pawn-run-wood' : 'pawn-run');
                 break;
             case 'CHOPPING':
                 this.worker.play('pawn-chop');
+                break;
+            case 'CARRYING':
+                this.worker.play('pawn-idle-wood');
+                break;
+            case 'DEPOSITING':
+                this.worker.play('pawn-idle-wood');
                 break;
         }
     }
@@ -390,32 +432,202 @@ export class GameScene extends Scene
     }
 
     /**
-     * Starts chopping a tree. The worker faces the tree and chops on a timer.
+     * Starts chopping a tree. Each hit decrements HP. When HP=0, tree becomes stump.
      */
     private startChopping (treeCol: number, treeRow: number): void
     {
         const treeKey = `${treeCol},${treeRow}`;
         const treeSprite = this.treeSprites.get(treeKey);
 
-        if (!treeSprite) return;
+        if (!treeSprite) {
+            // Tree already gone — find next tree
+            this.findAndChopNextTree();
+            return;
+        }
 
         this.chopTargetTree = treeSprite;
+        this.chopTargetKey = treeKey;
+        this.lastChopTreeCol = treeCol;
+        this.lastChopTreeRow = treeRow;
+
+        // Initialize health if first time
+        if (!this.treeHealth.has(treeKey)) {
+            this.treeHealth.set(treeKey, TREE_MAX_HP);
+        }
 
         // Face the tree
         const treePixel = this.gridToPixel(treeCol, treeRow);
         this.worker.setFlipX(treePixel.x < this.worker.x);
 
-        // Enter chopping state
         this.setWorkerState('CHOPPING');
 
-        // Start harvest timer — +5 wood every 2 seconds
+        // Chop timer — each tick is one "hit"
         this.chopTimer = this.time.addEvent({
-            delay: 2000,
+            delay: CHOP_INTERVAL,
             loop: true,
             callback: () => {
-                useGameStore.getState().addWood(5);
+                const hp = (this.treeHealth.get(treeKey) ?? 0) - 1;
+                this.treeHealth.set(treeKey, hp);
+                this.carriedWood += WOOD_PER_HIT;
+
+                // Shake the tree on hit
+                if (this.chopTargetTree) {
+                    this.tweens.add({
+                        targets: this.chopTargetTree,
+                        x: this.chopTargetTree.x + 4,
+                        duration: 50,
+                        yoyo: true,
+                        repeat: 3,
+                    });
+                }
+
+                if (hp <= 0) {
+                    this.fellTree(treeCol, treeRow);
+                }
             },
         });
+    }
+
+    /**
+     * Fells a tree: removes sprite, places stump, starts carry cycle.
+     */
+    private fellTree (col: number, row: number): void
+    {
+        const key = `${col},${row}`;
+        this.cancelChopping();
+
+        // Remove tree sprite
+        const tree = this.treeSprites.get(key);
+        if (tree) {
+            tree.destroy();
+            this.treeSprites.delete(key);
+        }
+        this.treeHealth.delete(key);
+
+        // Place stump (tile stays blocked)
+        const pos = this.gridToPixel(col, row);
+        const stump = this.add.image(pos.x, pos.y + 8, 'stump');
+        stump.setDisplaySize(TILE_SIZE * 0.8, TILE_SIZE * 1.0);
+        stump.setDepth(2);
+
+        // Switch to carrying mode
+        this.isCarrying = true;
+        this.setWorkerState('CARRYING');
+
+        // Try to deposit at nearest hut
+        this.depositWoodAtNearestHut();
+    }
+
+    /**
+     * Finds the nearest woodcutter_hut and walks there to deposit wood.
+     * If no hut exists, deposits immediately (wood goes to Zustand directly).
+     */
+    private depositWoodAtNearestHut (): void
+    {
+        const huts = this.buildings.filter(b => b.type === 'woodcutter_hut');
+
+        if (huts.length === 0) {
+            // No hut — deposit immediately
+            useGameStore.getState().addWood(this.carriedWood);
+            this.carriedWood = 0;
+            this.isCarrying = false;
+            this.findAndChopNextTree();
+            return;
+        }
+
+        // Find nearest hut
+        let nearest = huts[0];
+        let nearestDist = Infinity;
+        for (const hut of huts) {
+            const dist = Math.abs(hut.col - this.workerGridX) + Math.abs(hut.row - this.workerGridY);
+            if (dist < nearestDist) {
+                nearestDist = dist;
+                nearest = hut;
+            }
+        }
+
+        // Find walkable tile adjacent to hut
+        const adj = this.findAdjacentWalkable(nearest.col, nearest.row);
+        if (!adj) {
+            // Can't reach — deposit immediately
+            useGameStore.getState().addWood(this.carriedWood);
+            this.carriedWood = 0;
+            this.isCarrying = false;
+            this.findAndChopNextTree();
+            return;
+        }
+
+        this.easystar.findPath(
+            this.workerGridX, this.workerGridY,
+            adj.col, adj.row,
+            (path) => {
+                if (path && path.length > 1) {
+                    this.moveAlongPath(path, () => {
+                        // Deposit!
+                        useGameStore.getState().addWood(this.carriedWood);
+                        this.carriedWood = 0;
+                        this.isCarrying = false;
+                        this.setWorkerState('IDLE');
+                        // Auto-loop: find next tree
+                        this.findAndChopNextTree();
+                    });
+                } else {
+                    useGameStore.getState().addWood(this.carriedWood);
+                    this.carriedWood = 0;
+                    this.isCarrying = false;
+                    this.findAndChopNextTree();
+                }
+            }
+        );
+    }
+
+    /**
+     * Auto-loop: finds the nearest remaining tree and starts chopping it.
+     */
+    private findAndChopNextTree (): void
+    {
+        let bestKey = '';
+        let bestDist = Infinity;
+        let bestCol = -1;
+        let bestRow = -1;
+
+        for (const [key] of this.treeSprites) {
+            const [c, r] = key.split(',').map(Number);
+            const dist = Math.abs(c - this.workerGridX) + Math.abs(r - this.workerGridY);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestKey = key;
+                bestCol = c;
+                bestRow = r;
+            }
+        }
+
+        if (!bestKey) {
+            this.setWorkerState('IDLE');
+            return;
+        }
+
+        const adj = this.findAdjacentWalkable(bestCol, bestRow);
+        if (!adj) {
+            this.setWorkerState('IDLE');
+            return;
+        }
+
+        this.easystar.findPath(
+            this.workerGridX, this.workerGridY,
+            adj.col, adj.row,
+            (path) => {
+                if (path && path.length > 1) {
+                    this.moveAlongPath(path, () => {
+                        this.startChopping(bestCol, bestRow);
+                    });
+                } else if (path && path.length === 1) {
+                    this.startChopping(bestCol, bestRow);
+                } else {
+                    this.setWorkerState('IDLE');
+                }
+            }
+        );
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -458,6 +670,12 @@ export class GameScene extends Scene
 
     private handleTap (pointer: Phaser.Input.Pointer): void
     {
+        // ── Building Placement Mode intercept ───────────────
+        if (this.isPlacingBuilding) {
+            this.tryPlaceBuilding(pointer);
+            return;
+        }
+
         const worldX = pointer.worldX;
         const worldY = pointer.worldY;
 
@@ -532,9 +750,11 @@ export class GameScene extends Scene
         // Show tap indicator
         this.showTapIndicator(gridPos.col, gridPos.row);
 
-        // Cancel existing actions
+        // Cancel existing actions (including auto-loop)
         this.cancelMovement();
         this.cancelChopping();
+        this.isCarrying = false;
+        this.carriedWood = 0;
 
         // Request path
         this.easystar.findPath(
@@ -686,6 +906,110 @@ export class GameScene extends Scene
                 this.tapIndicator.setAlpha(1);
             },
         });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  BUILDING PLACEMENT
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * Polls Zustand each frame to sync building placement mode.
+     * Renders ghost building at pointer position.
+     */
+    private updateBuildingGhost (): void
+    {
+        const storeState = useGameStore.getState();
+        const placing = storeState.isPlacingBuilding;
+
+        if (placing !== this.isPlacingBuilding) {
+            this.isPlacingBuilding = placing;
+
+            if (placing) {
+                if (!this.ghostBuilding) {
+                    this.ghostBuilding = this.add.image(0, 0, 'house3');
+                    this.ghostBuilding.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2.5);
+                    this.ghostBuilding.setDepth(50);
+                    this.ghostBuilding.setAlpha(0.5);
+                }
+            } else {
+                if (this.ghostBuilding) {
+                    this.ghostBuilding.destroy();
+                    this.ghostBuilding = null;
+                }
+            }
+        }
+
+        // Update ghost position
+        if (this.ghostBuilding && this.isPlacingBuilding) {
+            const pointer = this.input.activePointer;
+            const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+            const grid = this.pixelToGrid(worldPoint.x, worldPoint.y);
+
+            // Snap to 2x2 origin (top-left of the footprint)
+            const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - 2));
+            const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - 2));
+
+            // Center sprite on 2x2 area
+            const cx = snappedCol * TILE_SIZE + TILE_SIZE;
+            const cy = snappedRow * TILE_SIZE + TILE_SIZE;
+            this.ghostBuilding.setPosition(cx, cy - 8);
+
+            // Validate 2x2 area
+            const valid = this.canPlaceBuilding(snappedCol, snappedRow);
+            this.ghostBuilding.setTint(valid ? 0x00ff00 : 0xff0000);
+        }
+    }
+
+    private canPlaceBuilding (col: number, row: number): boolean
+    {
+        for (let dr = 0; dr < 2; dr++) {
+            for (let dc = 0; dc < 2; dc++) {
+                const r = row + dr;
+                const c = col + dc;
+                if (r >= GRID_ROWS || c >= GRID_COLS) return false;
+                if (this.walkGrid[r][c] !== TILE_WALKABLE) return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Called from handleTap when in placement mode.
+     */
+    private tryPlaceBuilding (pointer: Phaser.Input.Pointer): void
+    {
+        const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const grid = this.pixelToGrid(worldPoint.x, worldPoint.y);
+        const col = Math.max(0, Math.min(grid.col, GRID_COLS - 2));
+        const row = Math.max(0, Math.min(grid.row, GRID_ROWS - 2));
+
+        if (!this.canPlaceBuilding(col, row)) return;
+
+        const store = useGameStore.getState();
+        if (store.wood < BUILDING_COST_WOOD) return;
+
+        // Deduct cost
+        store.addWood(-BUILDING_COST_WOOD);
+
+        // Place building sprite
+        const cx = col * TILE_SIZE + TILE_SIZE;
+        const cy = row * TILE_SIZE + TILE_SIZE;
+        const building = this.add.image(cx, cy - 8, 'house3');
+        building.setDisplaySize(TILE_SIZE * 2, TILE_SIZE * 2.5);
+        building.setDepth(3);
+
+        this.buildings.push({ type: 'woodcutter_hut', sprite: building, col, row });
+
+        // Block 2x2 area in walkGrid
+        for (let dr = 0; dr < 2; dr++) {
+            for (let dc = 0; dc < 2; dc++) {
+                this.walkGrid[row + dr][col + dc] = TILE_BLOCKED;
+            }
+        }
+        this.easystar.setGrid(this.walkGrid);
+
+        // Exit placement mode
+        store.setPlacingBuilding(null);
     }
 
     // ═══════════════════════════════════════════════════════════
