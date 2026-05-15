@@ -17,7 +17,8 @@ export class GoldHut extends BaseBuilding {
         this.acceptedResources = ['gold'];
 
         // Adjust origin based on gold_hut sprite specifics
-        this.mainSprite.setOrigin(0.5, 0.83);
+        this.mainSprite.setOrigin(0.5, 0.9);
+        this.mainSprite.setScale(0.6);
 
         // Setup hitbox for Building in local container space.
         this.setInteractive(

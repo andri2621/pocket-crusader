@@ -8,6 +8,8 @@ import { ResourceEntity } from '../entities/ResourceEntity';
 import { GoldResource } from '../entities/GoldResource';
 import { Stronghold } from '../entities/Stronghold';
 import { King } from '../entities/King';
+import { Warrior } from '../entities/Warrior';
+import { Barracks } from '../entities/Barracks';
 
 const MAP_WIDTH = GRID_COLS * TILE_SIZE;
 const MAP_HEIGHT = GRID_ROWS * TILE_SIZE;
@@ -47,6 +49,22 @@ export class GameScene extends Scene {
         // 4. Setup Input
         this.input.addPointer(2);
         this.setupCameraInput();
+
+        // 5. Setup Events
+        this.events.on('warrior_trained', (barracks: Barracks) => {
+            // Find a walkable tile near the barracks entrance (bottom edge)
+            const entranceCol = barracks.gridX; 
+            const entranceRow = barracks.gridY + 1; // Since it's 2x2, bottom edge is gridY + 1, below is gridY + 2
+            
+            // Standard 8-direction adjacency for unit spawning
+            const spawnPos = this.gridManager.findAdjacentWalkable(entranceCol, entranceRow + 1, { col: entranceCol, row: entranceRow + 1 })
+                          || this.gridManager.getRandomAdjacentWalkable(entranceCol, entranceRow + 1);
+
+            if (spawnPos) {
+                const warrior = new Warrior({ scene: this, col: spawnPos.col, row: spawnPos.row, texture: 'warrior-idle' });
+                this.entityManager.addUnit(warrior);
+            }
+        });
 
         EventBus.emit('current-scene-ready', this);
     }
@@ -202,5 +220,10 @@ export class GameScene extends Scene {
         this.anims.create({ key: 'pawn-idle-pickaxe', frames: this.anims.generateFrameNumbers('pawn-idle-pickaxe', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run-pickaxe', frames: this.anims.generateFrameNumbers('pawn-run-pickaxe', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'pawn-mine', frames: this.anims.generateFrameNumbers('pawn-mine', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
+
+        // ── Warrior Animations ──
+        this.anims.create({ key: 'warrior-idle', frames: this.anims.generateFrameNumbers('warrior-idle', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
+        this.anims.create({ key: 'warrior-run', frames: this.anims.generateFrameNumbers('warrior-run', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+        this.anims.create({ key: 'warrior-attack', frames: this.anims.generateFrameNumbers('warrior-attack', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
     }
 }

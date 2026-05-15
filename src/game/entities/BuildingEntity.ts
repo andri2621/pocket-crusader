@@ -13,8 +13,9 @@ export class BuildingEntity extends BaseBuilding {
         this.isDropOff = false;
         this.acceptedResources = ['wood'];
 
-        // Adjust origin based on house3 sprite specifics
-        this.mainSprite.setOrigin(0.5, 0.83);
+        // Adjust origin and scale so the large Hut asset fits inside a 1x1 footprint 
+        this.mainSprite.setOrigin(0.5, 0.9);
+        this.mainSprite.setScale(0.6);
 
         // Setup hitbox for Building in local container space.
         this.setInteractive(

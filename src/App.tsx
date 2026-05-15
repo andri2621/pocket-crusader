@@ -2,8 +2,9 @@ import { useRef, useState, useEffect } from "react";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
 import { useGameStore } from "./store/useGameStore";
 import styles from "./styles/App.module.css";
+import { EventBus } from "./game/EventBus";
 
-function BuildMenu({ wood }: { wood: number }) {
+function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
     const isOpen = useGameStore((s) => s.isBuildMenuOpen);
     const toggleMenu = useGameStore((s) => s.toggleBuildMenu);
     const setPlacing = useGameStore((s) => s.setPlacingBuilding);
@@ -12,6 +13,7 @@ function BuildMenu({ wood }: { wood: number }) {
 
     const canAffordHut = wood >= 50;
     const canAffordHouse = wood >= 30;
+    const canAffordBarracks = wood >= 50 && gold >= 50;
 
     return (
         <div className={styles.buildMenuOverlay} onClick={toggleMenu}>
@@ -45,6 +47,15 @@ function BuildMenu({ wood }: { wood: number }) {
                         <span className={styles.buildCardLabel}>Gold Hut</span>
                         <span className={styles.buildCardCost}>🪵 50</span>
                     </button>
+                    <button
+                        className={`${styles.buildCard} ${!canAffordBarracks ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordBarracks}
+                        onClick={() => { if (canAffordBarracks) setPlacing('barracks'); }}
+                    >
+                        <span className={styles.buildCardIcon}>⚔️</span>
+                        <span className={styles.buildCardLabel}>Barracks</span>
+                        <span className={styles.buildCardCost}>🪵 50 💰 50</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -60,6 +71,16 @@ function App() {
     const currentPop = useGameStore((state) => state.currentPopulation);
     const maxPop = useGameStore((state) => state.maxPopulation);
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
+    const selectedBarracksId = useGameStore((state) => state.selectedBarracksId);
+
+    const handleTrainWarrior = () => {
+        if (gold >= 20 && currentPop < maxPop && selectedBarracksId) {
+            // Deduct gold here, or let the scene do it? The scene entity doesn't have direct store access easily without importing, but it can.
+            // It's cleaner to deduct gold here and then emit.
+            useGameStore.getState().addGold(-20);
+            EventBus.emit('train_warrior', selectedBarracksId);
+        }
+    };
 
     useEffect(() => {
         const handleFullscreenChange = () => {
@@ -180,6 +201,19 @@ function App() {
                         </button>
                     </div>
 
+                    {/* Action Buttons (e.g. Train Warrior) */}
+                    {selectedBarracksId && !isPlacing && (
+                        <div className={styles.actionMenu}>
+                            <button 
+                                className={`${styles.actionBtn} ${gold < 20 || currentPop >= maxPop ? styles.actionBtnDisabled : ''}`}
+                                disabled={gold < 20 || currentPop >= maxPop}
+                                onClick={handleTrainWarrior}
+                            >
+                                ⚔️ Train Warrior (💰 20)
+                            </button>
+                        </div>
+                    )}
+
                     {/* Placement Mode Indicator */}
                     {isPlacing && (
                         <div className={styles.placementBar}>
@@ -188,7 +222,7 @@ function App() {
                     )}
 
                     {/* Build Menu */}
-                    <BuildMenu wood={wood} />
+                    <BuildMenu wood={wood} gold={gold} />
                 </>
             )}
         </div>

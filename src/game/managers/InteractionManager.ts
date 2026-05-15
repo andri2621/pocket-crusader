@@ -8,13 +8,15 @@ import { Worker } from '../entities/Worker';
 import { House } from '../entities/House';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { GoldHut } from '../entities/GoldHut';
+import { Barracks } from '../entities/Barracks';
 import { useGameStore } from '../../store/useGameStore';
 
 // Building definitions for ghost creation
-const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number }> = {
+const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number; goldCost?: number; scale?: number }> = {
     house: { texture: 'house1', width: 2, height: 2, cost: 30 },
-    woodcutter_hut: { texture: 'house3', width: 1, height: 1, cost: 50 },
-    gold_hut: { texture: 'gold_hut', width: 1, height: 1, cost: 50 },
+    woodcutter_hut: { texture: 'hut', width: 1, height: 1, cost: 50, scale: 0.6 },
+    gold_hut: { texture: 'gold_hut', width: 1, height: 1, cost: 50, scale: 0.6 },
+    barracks: { texture: 'barracks', width: 2, height: 2, cost: 50, goldCost: 50, scale: 0.76 },
 };
 
 export class InteractionManager {
@@ -84,11 +86,10 @@ export class InteractionManager {
         this.ghostSprite = this.scene.add.image(0, 0, def.texture);
         this.ghostSprite.setAlpha(0.6);
         this.ghostSprite.setDepth(50);
+        this.ghostSprite.setOrigin(0.5, 0.9);
         
-        if (def.width === 2 && def.height === 2) {
-            this.ghostSprite.setOrigin(0.5, 0.9);
-        } else {
-            this.ghostSprite.setOrigin(0.5, 0.83);
+        if (def.scale) {
+            this.ghostSprite.setScale(def.scale);
         }
 
         this.ghostOverlay = this.scene.add.graphics();
@@ -196,7 +197,10 @@ export class InteractionManager {
 
         const store = useGameStore.getState();
         if (store.wood < def.cost) return false;
+        if (def.goldCost && store.gold < def.goldCost) return false;
+
         store.addWood(-def.cost);
+        if (def.goldCost) store.addGold(-def.goldCost);
 
         if (this.buildType === 'house') {
             const house = new House({ scene: this.scene, col, row, texture: 'house1' });
@@ -204,7 +208,7 @@ export class InteractionManager {
         } else if (this.buildType === 'woodcutter_hut') {
             const hut = new BuildingEntity({
                 scene: this.scene, col, row,
-                texture: 'house3',
+                texture: 'hut',
                 buildingType: 'woodcutter_hut'
             });
             this.entityManager.addBuilding(hut);
@@ -215,6 +219,12 @@ export class InteractionManager {
                 buildingType: 'gold_hut'
             });
             this.entityManager.addBuilding(hut);
+        } else if (this.buildType === 'barracks') {
+            const barracks = new Barracks({
+                scene: this.scene, col, row,
+                texture: 'barracks'
+            });
+            this.entityManager.addBuilding(barracks);
         }
 
         this.gridManager.blockArea(col, row, def.width, def.height);
@@ -272,7 +282,7 @@ export class InteractionManager {
     private handleTap(pointer: Phaser.Input.Pointer) {
         if (this.isBuildMode) return;
 
-        // 1. Hit Test UI / Scene Elements
+        // Hit Test Elements
         const hitObjects = this.scene.input.hitTestPointer(pointer);
         
         let hitUnit: BaseUnit | null = null;
@@ -289,6 +299,17 @@ export class InteractionManager {
             }
             if (obj instanceof BaseBuilding) {
                 hitBuilding = obj;
+            }
+        }
+
+        // Handle Barracks Selection
+        const store = useGameStore.getState();
+        if (hitBuilding instanceof Barracks) {
+            store.setSelectedBarracks(hitBuilding.id);
+        } else {
+            // Deselect barracks if tapped elsewhere
+            if (store.selectedBarracksId) {
+                store.setSelectedBarracks(null);
             }
         }
 
@@ -316,12 +337,15 @@ export class InteractionManager {
             worker.cancelHutAutomation();
 
             const startPos = { col: worker.gridX, row: worker.gridY };
-            const isAdjacent = Math.abs(worker.gridX - resource.gridX) <= 1 && Math.abs(worker.gridY - resource.gridY) <= 1;
+            // Cardinal-only check: worker must be exactly up/down/left/right of resource
+            const dx = Math.abs(worker.gridX - resource.gridX);
+            const dy = Math.abs(worker.gridY - resource.gridY);
+            const isCardinalAdjacent = (dx + dy === 1);
 
-            if (isAdjacent) {
+            if (isCardinalAdjacent) {
                 worker.startGathering(resource);
             } else {
-                const adjTile = this.gridManager.findAdjacentWalkable(resource.gridX, resource.gridY, startPos);
+                const adjTile = this.gridManager.findCardinalAdjacentWalkable(resource.gridX, resource.gridY, startPos);
                 if (adjTile) {
                     this.gridManager.findPath(startPos, adjTile, (path) => {
                         if (path) {
@@ -372,7 +396,7 @@ export class InteractionManager {
                                 const nearestResource = this.entityManager.getNearestResource(currentPos, targetResourceType);
                                 
                                 if (nearestResource) {
-                                    const resAdj = this.gridManager.findAdjacentWalkable(nearestResource.gridX, nearestResource.gridY, currentPos);
+                                    const resAdj = this.gridManager.findCardinalAdjacentWalkable(nearestResource.gridX, nearestResource.gridY, currentPos);
                                     if (resAdj) {
                                         this.gridManager.findPath(currentPos, resAdj, (resPath) => {
                                             if (resPath) {
@@ -492,7 +516,7 @@ export class InteractionManager {
                         const resToGather = nextTargetResource || this.entityManager.getNearestResource({ col: worker.gridX, row: worker.gridY }, rType);
                         if (resToGather) {
                             const newStart = { col: worker.gridX, row: worker.gridY };
-                            const resAdj = this.gridManager.findAdjacentWalkable(resToGather.gridX, resToGather.gridY, newStart);
+                            const resAdj = this.gridManager.findCardinalAdjacentWalkable(resToGather.gridX, resToGather.gridY, newStart);
                             if (resAdj) {
                                 this.gridManager.findPath(newStart, resAdj, (resPath) => {
                                     if (resPath) {

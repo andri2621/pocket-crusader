@@ -143,9 +143,26 @@ export class Preloader extends Scene
 
         // ── Buildings ───────────────────────────────────────
         this.load.image('house1', 'Buildings/Blue Buildings/House1.png');
-        this.load.image('house3', 'Buildings/Blue Buildings/House3.png');
+        this.load.image('hut', 'Buildings/Blue Buildings/Hut.png');
         this.load.image('castle', 'Buildings/Blue Buildings/Castle.png');
         this.load.image('gold_hut', 'Buildings/Blue Buildings/Gold_Hut.png');
+        this.load.image('barracks', 'Buildings/Blue Buildings/Barracks.png');
+
+        // ── Warrior (Sword/Shield) Spritesheets ─────────────
+        this.load.spritesheet('warrior-idle', 'Units/Blue Units/Warrior/Warrior_Idle.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        this.load.spritesheet('warrior-run', 'Units/Blue Units/Warrior/Warrior_Run.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        this.load.spritesheet('warrior-attack', 'Units/Blue Units/Warrior/Warrior_Attack1.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
 
         // ── Terrain Props ───────────────────────────────────
         this.load.image('stump', 'Terrain/Resources/Wood/Trees/Stump 1.png');

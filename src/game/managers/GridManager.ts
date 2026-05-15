@@ -132,6 +132,58 @@ export class GridManager {
     }
 
     /**
+     * Find the nearest CARDINAL-only adjacent walkable tile (Up/Down/Left/Right).
+     * Used for resource harvesting so the worker is always axis-aligned with the resource.
+     */
+    public findCardinalAdjacentWalkable(col: number, row: number, startPos: GridPosition): GridPosition | null {
+        const cardinalDirs = [
+            { dc: 0, dr: -1 }, { dc: 0, dr: 1 }, { dc: -1, dr: 0 }, { dc: 1, dr: 0 },
+        ];
+
+        let bestTile: GridPosition | null = null;
+        let bestDist = Infinity;
+
+        for (const dir of cardinalDirs) {
+            const nc = col + dir.dc;
+            const nr = row + dir.dr;
+
+            if (this.isTileWalkable(nc, nr)) {
+                const dist = Math.abs(nc - startPos.col) + Math.abs(nr - startPos.row);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    bestTile = { col: nc, row: nr };
+                }
+            }
+        }
+
+        return bestTile;
+    }
+
+    /**
+     * Find a random CARDINAL-only adjacent walkable tile.
+     * Prevents workers from standing diagonally to resources.
+     */
+    public getRandomCardinalAdjacentWalkable(col: number, row: number): GridPosition | null {
+        const cardinalDirs = [
+            { dc: 0, dr: -1 }, { dc: 0, dr: 1 }, { dc: -1, dr: 0 }, { dc: 1, dr: 0 },
+        ];
+
+        const validTiles: GridPosition[] = [];
+
+        for (const dir of cardinalDirs) {
+            const nc = col + dir.dc;
+            const nr = row + dir.dr;
+
+            if (this.isTileWalkable(nc, nr)) {
+                validTiles.push({ col: nc, row: nr });
+            }
+        }
+
+        if (validTiles.length === 0) return null;
+        return validTiles[Math.floor(Math.random() * validTiles.length)];
+    }
+
+    /**
      * Find a random walkable tile within a given radius around a center point.
      * Used for idle wandering AI and anti-stacking spawn offsets.
      */

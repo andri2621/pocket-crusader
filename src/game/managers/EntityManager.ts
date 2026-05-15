@@ -7,7 +7,9 @@ import { GridManager } from './GridManager';
 import { useGameStore } from '../../store/useGameStore';
 import { Worker } from '../entities/Worker';
 import { King } from '../entities/King';
+import { Warrior } from '../entities/Warrior';
 import { BuildingEntity } from '../entities/BuildingEntity';
+import { EventBus } from '../EventBus';
 
 export class EntityManager {
     private scene: Scene;
@@ -27,11 +29,19 @@ export class EntityManager {
         this.scene.events.on('building_completed', (building: BaseBuilding) => {
             this.onBuildingCompleted(building);
         });
+
+        // Listen for React UI 'train_warrior' event
+        EventBus.on('train_warrior', (barracksId: string) => {
+            const barracks = this.buildings.find(b => b.id === barracksId) as any;
+            if (barracks && barracks.trainWarrior) {
+                barracks.trainWarrior();
+            }
+        });
     }
 
     public addUnit(unit: BaseUnit) {
         this.units.push(unit);
-        if (unit instanceof Worker) {
+        if (unit instanceof Worker || unit instanceof Warrior) {
             this.recalculatePopulation();
         }
     }
@@ -81,16 +91,16 @@ export class EntityManager {
         const store = useGameStore.getState();
         const completedHouses = this.buildings.filter(b => b.buildingType === 'house' && b.isCompleted).length;
         const maxPop = 5 + (completedHouses * 5);
-        const workers = this.units.filter(u => u instanceof Worker).length;
-        store.setPopulation(workers, maxPop);
-        return { workers, maxPop };
+        const currentPop = this.units.filter(u => u instanceof Worker || u instanceof Warrior).length;
+        store.setPopulation(currentPop, maxPop);
+        return { currentPop, maxPop };
     }
 
     private checkPopulationAndSpawn() {
-        const { workers, maxPop } = this.recalculatePopulation();
+        const { currentPop, maxPop } = this.recalculatePopulation();
         const store = useGameStore.getState();
 
-        if (workers < maxPop) {
+        if (currentPop < maxPop) {
             const stronghold = this.buildings.find(b => b.buildingType === 'stronghold');
             if (stronghold) {
                 // Anti-stacking: Find a random walkable tile near the stronghold (radius 2)
@@ -105,7 +115,7 @@ export class EntityManager {
                     texture: 'pawn-idle' 
                 });
                 this.addUnit(worker);
-                store.setPopulation(workers + 1, maxPop);
+                store.setPopulation(currentPop + 1, maxPop);
             }
         }
     }
@@ -133,6 +143,9 @@ export class EntityManager {
                 if (unit instanceof King) {
                     radius = 1;
                     unit.resetWanderDelay(15000, 20000);
+                } else if (unit instanceof Warrior) {
+                    radius = 5;
+                    unit.resetWanderDelay(8000, 15000);
                 } else if (unit instanceof Worker) {
                     unit.resetWanderDelay(5000, 10000);
                 }
@@ -299,9 +312,9 @@ export class EntityManager {
 
         const resource = topResources[Math.floor(Math.random() * topResources.length)];
 
-        // Stand Positions: Pick a random adjacent tile so workers don't overlap on the same spot
-        const resourceAdj = this.gridManager.getRandomAdjacentWalkable(resource.gridX, resource.gridY) || 
-                        this.gridManager.findAdjacentWalkable(resource.gridX, resource.gridY, currentPos);
+        // Stand Positions: Pick a random CARDINAL adjacent tile (no diagonal) for clean harvesting visuals
+        const resourceAdj = this.gridManager.getRandomCardinalAdjacentWalkable(resource.gridX, resource.gridY) || 
+                        this.gridManager.findCardinalAdjacentWalkable(resource.gridX, resource.gridY, currentPos);
 
         if (resourceAdj) {
             this.gridManager.findPath(currentPos, resourceAdj, (path) => {

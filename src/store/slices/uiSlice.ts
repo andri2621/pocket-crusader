@@ -5,6 +5,8 @@ export interface UISlice {
     toggleBuildMenu: () => void;
     isPlacingBuilding: string | null;
     setPlacingBuilding: (type: string | null) => void;
+    selectedBarracksId: string | null;
+    setSelectedBarracks: (id: string | null) => void;
 }
 
 export const createUISlice: StateCreator<UISlice> = (set) => ({
@@ -12,4 +14,6 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
     toggleBuildMenu: () => set((state) => ({ isBuildMenuOpen: !state.isBuildMenuOpen })),
     isPlacingBuilding: null,
     setPlacingBuilding: (type: string | null) => set({ isPlacingBuilding: type, isBuildMenuOpen: false }),
+    selectedBarracksId: null,
+    setSelectedBarracks: (id: string | null) => set({ selectedBarracksId: id }),
 });
