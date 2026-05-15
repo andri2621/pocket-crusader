@@ -12,6 +12,9 @@ export class House extends BaseBuilding {
             footprintHeight: 2,
         });
 
+        // House is NOT a resource drop-off point (default false, explicit for clarity)
+        this.isDropOff = false;
+
         // Sprite origin for 2x2 footprint alignment
         // Bottom-center of a 2-tile-wide footprint
         this.mainSprite.setOrigin(0.5, 0.9);
@@ -40,8 +43,7 @@ export class House extends BaseBuilding {
 
     public override completeConstruction() {
         super.completeConstruction();
-        this.setAlpha(1.0);
-        this.mainSprite.clearTint();
+        // super already handles: isCompleted=true, clearTint, setAlpha(1.0), emit event
     }
 
     /**

@@ -47,6 +47,8 @@ function App() {
     const [hasStarted, setHasStarted] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const wood = useGameStore((state) => state.wood);
+    const currentPop = useGameStore((state) => state.currentPopulation);
+    const maxPop = useGameStore((state) => state.maxPopulation);
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
 
     useEffect(() => {
@@ -138,12 +140,29 @@ function App() {
                     
                     {/* Game HUD Overlay */}
                     <div className={styles.hud}>
-                        <div className={styles.hudItem}>
-                            <span className={styles.hudIcon}>🪵</span>
-                            <span className={styles.hudValue}>{wood}</span>
+                        {/* Resources Section */}
+                        <div className={styles.hudSection}>
+                            <div className={styles.hudItem}>
+                                <span className={styles.hudIcon}>🪵</span>
+                                <span className={styles.hudValue}>{wood}</span>
+                            </div>
                         </div>
+
+                        <div className={styles.hudDivider} />
+
+                        {/* Population Section */}
+                        <div className={styles.hudSection}>
+                            <div className={styles.hudItem}>
+                                <span className={styles.hudIcon}>👥</span>
+                                <span className={styles.hudValue}>{currentPop}/{maxPop}</span>
+                            </div>
+                        </div>
+
+                        <div className={styles.hudDivider} />
+
+                        {/* Build Button */}
                         <button className={styles.hudBuildBtn} onClick={() => useGameStore.getState().toggleBuildMenu()}>
-                            🏠
+                            🔨
                         </button>
                     </div>
 

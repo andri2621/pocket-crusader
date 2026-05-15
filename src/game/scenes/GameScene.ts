@@ -5,7 +5,6 @@ import { EntityManager } from '../managers/EntityManager';
 import { InteractionManager } from '../managers/InteractionManager';
 import { Worker } from '../entities/Worker';
 import { ResourceEntity } from '../entities/ResourceEntity';
-import { BuildingEntity } from '../entities/BuildingEntity';
 import { Stronghold } from '../entities/Stronghold';
 import { King } from '../entities/King';
 
@@ -34,7 +33,7 @@ export class GameScene extends Scene {
 
         // 1. Initialize Managers
         this.gridManager = new GridManager(this);
-        this.entityManager = new EntityManager(this);
+        this.entityManager = new EntityManager(this, this.gridManager);
         this.interactionManager = new InteractionManager(this, this.entityManager, this.gridManager);
 
         // 2. Spawn Initial State
@@ -47,7 +46,6 @@ export class GameScene extends Scene {
         // 4. Setup Input
         this.input.addPointer(2);
         this.setupCameraInput();
-        this.setupKeyboard();
 
         EventBus.emit('current-scene-ready', this);
     }
@@ -93,21 +91,6 @@ export class GameScene extends Scene {
         const worker2 = new Worker({ scene: this, col: 17, row: 10, texture: 'pawn-idle' });
         this.entityManager.addUnit(worker1);
         this.entityManager.addUnit(worker2);
-    }
-
-    // ── Keyboard Shortcuts ─────────────────────────────────────
-
-    private setupKeyboard() {
-        if (!this.input.keyboard) return;
-
-        // 'B' key — toggle build mode (House)
-        this.input.keyboard.on('keydown-B', () => {
-            if (this.interactionManager.isInBuildMode) {
-                this.interactionManager.exitBuildMode();
-            } else {
-                this.interactionManager.enterBuildMode('house');
-            }
-        });
     }
 
     // --- Visuals & Input ---
@@ -176,11 +159,19 @@ export class GameScene extends Scene {
     }
 
     private createAnimations() {
+        // ── Standard Pawn Animations ──
         this.anims.create({ key: 'pawn-idle', frames: this.anims.generateFrameNumbers('pawn-idle', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run', frames: this.anims.generateFrameNumbers('pawn-run', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
         this.anims.create({ key: 'pawn-chop', frames: this.anims.generateFrameNumbers('pawn-chop', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'tree-sway', frames: this.anims.generateFrameNumbers('tree', { start: 0, end: 7 }), frameRate: 4, repeat: -1 });
+
+        // ── Wood Carrying Animations ──
         this.anims.create({ key: 'pawn-idle-wood', frames: this.anims.generateFrameNumbers('pawn-idle-wood', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
         this.anims.create({ key: 'pawn-run-wood', frames: this.anims.generateFrameNumbers('pawn-run-wood', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+
+        // ── Hammer / Construction Animations ──
+        this.anims.create({ key: 'pawn-idle-hammer', frames: this.anims.generateFrameNumbers('pawn-idle-hammer', { start: 0, end: 7 }), frameRate: 8, repeat: -1 });
+        this.anims.create({ key: 'pawn-run-hammer', frames: this.anims.generateFrameNumbers('pawn-run-hammer', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+        this.anims.create({ key: 'pawn-build', frames: this.anims.generateFrameNumbers('pawn-build', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
     }
 }

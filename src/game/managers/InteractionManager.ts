@@ -55,7 +55,6 @@ export class InteractionManager {
 
     /**
      * Poll the Zustand store each frame to detect when React UI triggers build mode.
-     * Called from the scene's update loop.
      */
     private pollBuildModeFromStore() {
         this.scene.events.on('update', () => {
@@ -65,14 +64,11 @@ export class InteractionManager {
             if (placing && !this.isBuildMode) {
                 this.enterBuildMode(placing);
             } else if (!placing && this.isBuildMode) {
-                this.exitBuildMode(false); // Store already cleared, don't re-clear
+                this.exitBuildMode(false);
             }
         });
     }
 
-    /**
-     * Enter build mode — create ghost sprite + overlay
-     */
     public enterBuildMode(buildingType: string) {
         if (this.isBuildMode) this.exitBuildMode();
 
@@ -81,40 +77,30 @@ export class InteractionManager {
 
         this.isBuildMode = true;
         this.buildType = buildingType;
-
-        // Deselect any selected unit
         this.deselectUnit();
 
-        // Create ghost sprite
         this.ghostSprite = this.scene.add.image(0, 0, def.texture);
         this.ghostSprite.setAlpha(0.6);
         this.ghostSprite.setDepth(50);
         
-        // Origin depends on footprint size
         if (def.width === 2 && def.height === 2) {
             this.ghostSprite.setOrigin(0.5, 0.9);
         } else {
             this.ghostSprite.setOrigin(0.5, 0.83);
         }
 
-        // Create footprint overlay graphics
         this.ghostOverlay = this.scene.add.graphics();
         this.ghostOverlay.setDepth(49);
 
-        // Hide until first pointer interaction
         this.ghostSprite.setVisible(false);
         this.ghostOverlay.setVisible(false);
 
-        // Sync store
         const store = useGameStore.getState();
         if (store.isPlacingBuilding !== buildingType) {
             store.setPlacingBuilding(buildingType);
         }
     }
 
-    /**
-     * Exit build mode — destroy ghost, reset state
-     */
     public exitBuildMode(clearStore: boolean = true) {
         this.isBuildMode = false;
         this.buildType = null;
@@ -137,9 +123,6 @@ export class InteractionManager {
         }
     }
 
-    /**
-     * Update ghost position and tint — called every frame from scene update
-     */
     public updateGhost() {
         if (!this.isBuildMode || !this.ghostSprite || !this.buildType) return;
 
@@ -147,90 +130,59 @@ export class InteractionManager {
         if (!def) return;
 
         const pointer = this.scene.input.activePointer;
-        
-        // Desktop: always track mouse. Mobile: only track when pointer is down
         const isMobile = !this.scene.sys.game.device.os.desktop;
         if (isMobile && !this.pointerDown) return;
 
         const worldPoint = this.scene.cameras.main.getWorldPoint(pointer.x, pointer.y);
         const grid = this.gridManager.pixelToGrid(worldPoint.x, worldPoint.y);
-        
-        // Clamp to grid bounds (accounting for footprint width/height)
         const snappedCol = Math.max(0, Math.min(grid.col, GRID_COLS - def.width));
         const snappedRow = Math.max(0, Math.min(grid.row, GRID_ROWS - def.height));
 
-        // Only recalculate if grid position changed
         if (snappedCol !== this.ghostGridCol || snappedRow !== this.ghostGridRow) {
             this.ghostGridCol = snappedCol;
             this.ghostGridRow = snappedRow;
-
-            // Check area availability
             this.ghostValid = this.gridManager.isAreaAvailable(snappedCol, snappedRow, def.width, def.height);
 
-            // Update ghost sprite position
             if (def.width === 2 && def.height === 2) {
-                // 2x2: center at middle of 2-tile width, bottom of 2-tile height
                 this.ghostSprite!.setPosition(
-                    snappedCol * TILE_SIZE + TILE_SIZE,       // center of 2 tiles
-                    snappedRow * TILE_SIZE + TILE_SIZE * 2    // bottom of 2 tiles
+                    snappedCol * TILE_SIZE + TILE_SIZE,
+                    snappedRow * TILE_SIZE + TILE_SIZE * 2
                 );
             } else {
-                // 1x1: standard bottom-center
                 const pos = this.gridManager.getTileBottomCenter(snappedCol, snappedRow);
                 this.ghostSprite!.setPosition(pos.x, pos.y);
             }
 
-            // Tint ghost sprite
             const tintColor = this.ghostValid ? 0x00ff00 : 0xff0000;
             this.ghostSprite!.setTint(tintColor);
-
-            // Draw footprint overlay
             this.drawFootprintOverlay(snappedCol, snappedRow, def.width, def.height, this.ghostValid);
         }
 
-        // Ensure visible
         this.ghostSprite!.setVisible(true);
         this.ghostOverlay!.setVisible(true);
     }
 
-    /**
-     * Draw a colored rectangle overlay on the grid tiles to visualize the footprint area.
-     */
     private drawFootprintOverlay(col: number, row: number, width: number, height: number, valid: boolean) {
         if (!this.ghostOverlay) return;
-
         this.ghostOverlay.clear();
 
         const fillColor = valid ? 0x00ff00 : 0xff0000;
-        const fillAlpha = 0.25;
         const strokeColor = valid ? 0x00ff00 : 0xff0000;
-        const strokeAlpha = 0.8;
 
-        // Fill the entire footprint area
-        this.ghostOverlay.fillStyle(fillColor, fillAlpha);
-        this.ghostOverlay.fillRect(
-            col * TILE_SIZE, row * TILE_SIZE,
-            width * TILE_SIZE, height * TILE_SIZE
-        );
+        this.ghostOverlay.fillStyle(fillColor, 0.25);
+        this.ghostOverlay.fillRect(col * TILE_SIZE, row * TILE_SIZE, width * TILE_SIZE, height * TILE_SIZE);
 
-        // Stroke individual tiles for clarity
-        this.ghostOverlay.lineStyle(2, strokeColor, strokeAlpha);
+        this.ghostOverlay.lineStyle(2, strokeColor, 0.8);
         for (let r = 0; r < height; r++) {
             for (let c = 0; c < width; c++) {
                 this.ghostOverlay.strokeRect(
-                    (col + c) * TILE_SIZE + 1,
-                    (row + r) * TILE_SIZE + 1,
-                    TILE_SIZE - 2,
-                    TILE_SIZE - 2
+                    (col + c) * TILE_SIZE + 1, (row + r) * TILE_SIZE + 1,
+                    TILE_SIZE - 2, TILE_SIZE - 2
                 );
             }
         }
     }
 
-    /**
-     * Attempt to place the building at the current ghost position.
-     * Returns true if placement succeeded.
-     */
     private tryPlaceBuilding(): boolean {
         if (!this.isBuildMode || !this.buildType || !this.ghostValid) return false;
 
@@ -240,14 +192,10 @@ export class InteractionManager {
         const col = this.ghostGridCol;
         const row = this.ghostGridRow;
 
-        // Check cost
         const store = useGameStore.getState();
         if (store.wood < def.cost) return false;
-
-        // Deduct cost
         store.addWood(-def.cost);
 
-        // Create building entity
         if (this.buildType === 'house') {
             const house = new House({ scene: this.scene, col, row, texture: 'house1' });
             this.entityManager.addBuilding(house);
@@ -260,10 +208,7 @@ export class InteractionManager {
             this.entityManager.addBuilding(hut);
         }
 
-        // Block tiles in grid
         this.gridManager.blockArea(col, row, def.width, def.height);
-
-        // Exit build mode
         this.exitBuildMode();
         return true;
     }
@@ -275,42 +220,30 @@ export class InteractionManager {
     private setupInput() {
         const TAP_THRESHOLD = 10;
 
-        // ── Pointer Down ──
         this.scene.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-            // Right-click to cancel build mode (button === 2)
             if (pointer.button === 2 && this.isBuildMode) {
                 this.exitBuildMode();
                 return;
             }
-
             if (this.isBuildMode && pointer.button === 0) {
                 this.pointerDown = true;
-                // On mobile, show ghost immediately at tap location
                 this.updateGhost();
             }
         });
 
-        // ── Pointer Move ──
-        this.scene.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-            if (this.isBuildMode) {
-                // Ghost tracking is handled in updateGhost() called from scene update
-                // For mobile drag: if pointer is down, mark for update
-                return;
-            }
+        this.scene.input.on('pointermove', (_pointer: Phaser.Input.Pointer) => {
+            // Ghost tracking handled in updateGhost() from scene update loop
         });
 
-        // ── Pointer Up ──
         this.scene.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
             if (this.isBuildMode) {
                 if (pointer.button === 0) {
-                    // Try to place the building
                     this.tryPlaceBuilding();
                     this.pointerDown = false;
                 }
                 return; // Block ALL other interactions during build mode
             }
 
-            // Normal interaction — only if NOT in build mode
             const distance = Phaser.Math.Distance.Between(
                 pointer.downX, pointer.downY,
                 pointer.upX, pointer.upY
@@ -328,8 +261,6 @@ export class InteractionManager {
     }
 
     private handleTap(pointer: Phaser.Input.Pointer) {
-        // Build mode taps are handled in pointerup above — we should never reach here in build mode
-        // But double-check just in case
         if (this.isBuildMode) return;
 
         // 1. Hit Test UI / Scene Elements
@@ -366,10 +297,12 @@ export class InteractionManager {
             this.showTapIndicator(resource.gridX, resource.gridY);
             
             if (worker.isCarryingWood) {
-                // If carrying wood, deposit first, then chop this specific tree
                 this.handleResourceCollected(worker, resource);
                 return;
             }
+
+            // Cancel any construction job
+            worker.cancelBuilding();
 
             const startPos = { col: worker.gridX, row: worker.gridY };
             const isAdjacent = Math.abs(worker.gridX - resource.gridX) <= 1 && Math.abs(worker.gridY - resource.gridY) <= 1;
@@ -398,34 +331,58 @@ export class InteractionManager {
 
             this.showTapIndicator(building.gridX, building.gridY);
             
+            // Cancel any existing construction job before reassigning
+            worker.cancelBuilding();
+
+            // CASE A: Unfinished building → manual build order
+            if (!building.isCompleted) {
+                this.entityManager.dispatchWorkerToBuilding(worker, building);
+                return;
+            }
+
+            // CASE B: Drop-off building (Stronghold, Woodcutter Hut) → deposit + auto-chop
+            if (building.isDropOff) {
+                const startPos = { col: worker.gridX, row: worker.gridY };
+                const adjTile = this.gridManager.findAdjacentWalkable(building.gridX, building.gridY, startPos);
+
+                if (adjTile) {
+                    this.gridManager.findPath(startPos, adjTile, (path) => {
+                        if (path) {
+                            worker.moveAlongPath(path, () => {
+                                if (worker.isCarryingWood) {
+                                    worker.depositResource();
+                                }
+                                
+                                // Auto-chop loop: Find the nearest tree and chop it
+                                const currentPos = { col: worker.gridX, row: worker.gridY };
+                                const nearestTree = this.entityManager.getNearestResource(currentPos, 'wood');
+                                
+                                if (nearestTree) {
+                                    const treeAdj = this.gridManager.findAdjacentWalkable(nearestTree.gridX, nearestTree.gridY, currentPos);
+                                    if (treeAdj) {
+                                        this.gridManager.findPath(currentPos, treeAdj, (treePath) => {
+                                            if (treePath) {
+                                                worker.moveAlongPath(treePath, () => {
+                                                    worker.startChopping(nearestTree);
+                                                });
+                                            }
+                                        });
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+                return;
+            }
+
+            // CASE C: Completed non-drop-off building (e.g., finished House) → just walk to it
             const startPos = { col: worker.gridX, row: worker.gridY };
             const adjTile = this.gridManager.findAdjacentWalkable(building.gridX, building.gridY, startPos);
-
             if (adjTile) {
                 this.gridManager.findPath(startPos, adjTile, (path) => {
                     if (path) {
-                        worker.moveAlongPath(path, () => {
-                            if (worker.isCarryingWood) {
-                                worker.depositResource();
-                            }
-                            
-                            // Auto-chop loop: Find the nearest tree and chop it
-                            const currentPos = { col: worker.gridX, row: worker.gridY };
-                            const nearestTree = this.entityManager.getNearestResource(currentPos, 'wood');
-                            
-                            if (nearestTree) {
-                                const treeAdj = this.gridManager.findAdjacentWalkable(nearestTree.gridX, nearestTree.gridY, currentPos);
-                                if (treeAdj) {
-                                    this.gridManager.findPath(currentPos, treeAdj, (treePath) => {
-                                        if (treePath) {
-                                            worker.moveAlongPath(treePath, () => {
-                                                worker.startChopping(nearestTree);
-                                            });
-                                        }
-                                    });
-                                }
-                            }
-                        });
+                        worker.moveAlongPath(path);
                     }
                 });
             }
@@ -441,6 +398,11 @@ export class InteractionManager {
             if (this.gridManager.isTileWalkable(targetPos.col, targetPos.row)) {
                 this.showTapIndicator(targetPos.col, targetPos.row);
                 
+                // Cancel construction if manually moving
+                if (this.selectedUnit instanceof Worker) {
+                    (this.selectedUnit as Worker).cancelBuilding();
+                }
+
                 const startPos = { col: this.selectedUnit.gridX, row: this.selectedUnit.gridY };
                 this.gridManager.findPath(startPos, targetPos, (path) => {
                     if (path && this.selectedUnit) {
@@ -492,14 +454,20 @@ export class InteractionManager {
         });
     }
 
+    /**
+     * Handle resource collection: find nearest DROP-OFF building (isDropOff=true) to deposit.
+     * Uses isDropOff flag instead of hardcoded building type.
+     */
     private handleResourceCollected(worker: Worker, nextTargetTree?: BaseResource) {
         const currentPos = { col: worker.gridX, row: worker.gridY };
-        const hut = this.entityManager.getNearestBuilding(currentPos, 'woodcutter_hut');
-        if (!hut) return; // No hut to deposit
+        
+        // Find nearest drop-off point (Stronghold OR Woodcutter Hut — any building with isDropOff=true)
+        const dropOff = this.entityManager.getNearestDropOff(currentPos);
+        if (!dropOff) return;
 
-        const hutAdj = this.gridManager.findAdjacentWalkable(hut.gridX, hut.gridY, currentPos);
-        if (hutAdj) {
-            this.gridManager.findPath(currentPos, hutAdj, (path) => {
+        const adjTile = this.gridManager.findAdjacentWalkable(dropOff.gridX, dropOff.gridY, currentPos);
+        if (adjTile) {
+            this.gridManager.findPath(currentPos, adjTile, (path) => {
                 if (path) {
                     worker.moveAlongPath(path, () => {
                         worker.depositResource();

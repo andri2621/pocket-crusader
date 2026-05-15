@@ -79,6 +79,25 @@ export class Preloader extends Scene
             frameHeight: 192,
         });
 
+        // ── Worker Hammer (Construction) Spritesheets ─────
+        // Idle with hammer: 8 frames (192x192)
+        this.load.spritesheet('pawn-idle-hammer', 'Units/Blue Units/Pawn/Pawn_Idle Hammer.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Run with hammer: 6 frames (192x192)
+        this.load.spritesheet('pawn-run-hammer', 'Units/Blue Units/Pawn/Pawn_Run Hammer.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
+        // Build (Interact Hammer): 6 frames (192x192)
+        this.load.spritesheet('pawn-build', 'Units/Blue Units/Pawn/Pawn_Interact Hammer.png', {
+            frameWidth: 192,
+            frameHeight: 192,
+        });
+
         // ── Buildings ───────────────────────────────────────
         this.load.image('house1', 'Buildings/Blue Buildings/House1.png');
         this.load.image('house3', 'Buildings/Blue Buildings/House3.png');

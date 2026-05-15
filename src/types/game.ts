@@ -3,7 +3,8 @@ export type WorkerState =
     | "MOVING"
     | "CHOPPING"
     | "CARRYING"
-    | "DEPOSITING";
+    | "DEPOSITING"
+    | "CONSTRUCTING";
 
 export type ResourceType = "wood" | "gold" | "stone";
 

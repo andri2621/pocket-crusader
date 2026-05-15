@@ -21,5 +21,6 @@ export class Stronghold extends BaseBuilding {
         );
         
         this.completeConstruction();
+        this.isDropOff = true; // Stronghold is a universal resource drop-off
     }
 }

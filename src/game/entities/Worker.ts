@@ -2,6 +2,7 @@ import { BaseUnit } from './base/BaseUnit';
 import { UnitConfig } from '../../types/entity.types';
 import { WorkerState } from '../../types/game';
 import { BaseResource } from './base/BaseResource';
+import { BaseBuilding } from './base/BaseBuilding';
 import { useGameStore } from '../../store/useGameStore';
 
 export class Worker extends BaseUnit {
@@ -9,6 +10,11 @@ export class Worker extends BaseUnit {
     private carriedWood: number = 0;
     private chopTimer: Phaser.Time.TimerEvent | null = null;
     private targetResource: BaseResource | null = null;
+
+    // ── Construction State ─────────────────────────────────
+    private buildTimer: Phaser.Time.TimerEvent | null = null;
+    private targetBuilding: BaseBuilding | null = null;
+    public isConstructionJob: boolean = false;
 
     public get isCarryingWood(): boolean {
         return this.isCarrying;
@@ -29,24 +35,42 @@ export class Worker extends BaseUnit {
             new Phaser.Geom.Rectangle(-32, -64, 64, 64),
             Phaser.Geom.Rectangle.Contains
         );
-        this.scene.input.enableDebug(this, 0xff0000);
     }
 
     protected override onStateChange(newState: WorkerState): void {
-        // Stop phantom chopping if we change state
+        // Stop phantom chopping if we change state away from CHOPPING
         if (newState !== 'CHOPPING' && this.chopTimer) {
             this.chopTimer.destroy();
             this.chopTimer = null;
             this.targetResource = null;
         }
 
+        // Stop construction if we change state away from CONSTRUCTING
+        if (newState !== 'CONSTRUCTING' && this.buildTimer) {
+            this.buildTimer.destroy();
+            this.buildTimer = null;
+            this.targetBuilding = null;
+        }
+
+        // Clear construction job flag when going fully idle (not transitioning)
+        if (newState === 'IDLE' && !this.isConstructionJob) {
+            // Normal idle
+        }
+
         switch (newState) {
             case 'IDLE':
-                this.mainSprite.play(this.isCarrying ? 'pawn-idle-wood' : 'pawn-idle');
+                if (this.isConstructionJob) {
+                    this.mainSprite.play('pawn-idle-hammer');
+                } else {
+                    this.mainSprite.play(this.isCarrying ? 'pawn-idle-wood' : 'pawn-idle');
+                }
                 break;
             case 'MOVING':
-                // GameScene uses pawn-run and pawn-run-wood
-                this.mainSprite.play(this.isCarrying ? 'pawn-run-wood' : 'pawn-run');
+                if (this.isConstructionJob) {
+                    this.mainSprite.play('pawn-run-hammer');
+                } else {
+                    this.mainSprite.play(this.isCarrying ? 'pawn-run-wood' : 'pawn-run');
+                }
                 break;
             case 'CHOPPING':
                 this.mainSprite.play('pawn-chop');
@@ -57,10 +81,20 @@ export class Worker extends BaseUnit {
             case 'DEPOSITING':
                 this.mainSprite.play('pawn-idle-wood');
                 break;
+            case 'CONSTRUCTING':
+                this.mainSprite.play('pawn-build');
+                break;
         }
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  CHOPPING (Resource Gathering)
+    // ══════════════════════════════════════════════════════════
+
     public startChopping(resource: BaseResource): void {
+        // Cancel any construction job
+        this.cancelBuilding();
+
         if (this.chopTimer) {
             this.chopTimer.destroy();
         }
@@ -112,5 +146,73 @@ export class Worker extends BaseUnit {
             this.isCarrying = false;
         }
         this.setWorkerState('IDLE');
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  CONSTRUCTING (Building)
+    // ══════════════════════════════════════════════════════════
+
+    /**
+     * Start building a target building.
+     * Worker must already be adjacent to the building.
+     */
+    public startBuilding(building: BaseBuilding): void {
+        // Cancel any chopping
+        if (this.chopTimer) {
+            this.chopTimer.destroy();
+            this.chopTimer = null;
+            this.targetResource = null;
+        }
+
+        this.targetBuilding = building;
+        this.isConstructionJob = true;
+        this.setWorkerState('CONSTRUCTING');
+
+        // Face the building
+        if (building.gridX < this.gridX) {
+            this.mainSprite.setFlipX(true);
+        } else if (building.gridX > this.gridX) {
+            this.mainSprite.setFlipX(false);
+        }
+
+        this.buildTimer = this.scene.time.addEvent({
+            delay: 1500, // BUILD_INTERVAL: each tick adds 10 progress → 15s solo
+            loop: true,
+            callback: () => {
+                if (!this.targetBuilding || this.targetBuilding.isCompleted) {
+                    this.cancelBuilding();
+                    this.setWorkerState('IDLE');
+                    return;
+                }
+
+                this.targetBuilding.addProgress(10);
+
+                // Check if building completed after this tick
+                if (this.targetBuilding.isCompleted) {
+                    this.cancelBuilding();
+                    this.setWorkerState('IDLE');
+                }
+            }
+        });
+    }
+
+    /**
+     * Cancel the current construction job.
+     * Cleanly resets hammer animation state.
+     */
+    public cancelBuilding(): void {
+        if (this.buildTimer) {
+            this.buildTimer.destroy();
+            this.buildTimer = null;
+        }
+        this.targetBuilding = null;
+        this.isConstructionJob = false;
+    }
+
+    /**
+     * Check if this worker is currently assigned to build a specific building.
+     */
+    public isAssignedToBuilding(building: BaseBuilding): boolean {
+        return this.targetBuilding === building && this.isConstructionJob;
     }
 }
