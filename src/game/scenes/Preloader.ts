@@ -81,6 +81,7 @@ export class Preloader extends Scene
 
         // ── Buildings ───────────────────────────────────────
         this.load.image('house3', 'Buildings/Blue Buildings/House3.png');
+        this.load.image('castle', 'Buildings/Blue Buildings/Castle.png');
 
         // ── Terrain Props ───────────────────────────────────
         this.load.image('stump', 'Terrain/Resources/Wood/Trees/Stump 1.png');

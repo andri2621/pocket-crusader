@@ -3,12 +3,16 @@ import { BaseUnit } from '../entities/base/BaseUnit';
 import { BaseBuilding } from '../entities/base/BaseBuilding';
 import { BaseResource } from '../entities/base/BaseResource';
 import { GridPosition, BuildingType } from '../../types/game';
+import { useGameStore } from '../../store/useGameStore';
+import { Worker } from '../entities/Worker';
 
 export class EntityManager {
     private scene: Scene;
     public units: BaseUnit[] = [];
     public buildings: BaseBuilding[] = [];
     public resources: BaseResource[] = [];
+    
+    private spawnTimer: number = 0;
 
     constructor(scene: Scene) {
         this.scene = scene;
@@ -35,6 +39,37 @@ export class EntityManager {
         }
         for (const resource of this.resources) {
             resource.update(time, delta);
+        }
+
+        this.spawnTimer += delta;
+        if (this.spawnTimer >= 10000) {
+            this.spawnTimer = 0;
+            this.checkPopulationAndSpawn();
+        }
+    }
+
+    private checkPopulationAndSpawn() {
+        const store = useGameStore.getState();
+        // Calculate max population: 5 base + 5 per completed house
+        const completedHouses = this.buildings.filter(b => b.buildingType === 'house' && b.isCompleted).length;
+        const maxPop = 5 + (completedHouses * 5);
+        
+        const workers = this.units.filter(u => u instanceof Worker).length;
+        
+        store.setPopulation(workers, maxPop);
+
+        if (workers < maxPop) {
+            const stronghold = this.buildings.find(b => b.buildingType === 'stronghold');
+            if (stronghold) {
+                const worker = new Worker({ 
+                    scene: this.scene, 
+                    col: stronghold.gridX, 
+                    row: stronghold.gridY + 1, 
+                    texture: 'pawn-idle' 
+                });
+                this.addUnit(worker);
+                store.setPopulation(workers + 1, maxPop);
+            }
         }
     }
 

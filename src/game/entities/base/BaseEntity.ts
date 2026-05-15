@@ -9,6 +9,9 @@ export abstract class BaseEntity extends Phaser.GameObjects.Container {
     public mainSprite: Phaser.GameObjects.Sprite;
     public selectionCircle: Phaser.GameObjects.Graphics;
 
+    public maxHealth: number = 0;
+    public currentHealth: number = 0;
+
     constructor(config: EntityConfig) {
         super(config.scene, config.x ?? 0, config.y ?? 0);
         
@@ -65,6 +68,32 @@ export abstract class BaseEntity extends Phaser.GameObjects.Container {
         this.selectionCircle.lineStyle(2, 0x00ff00, 0.8);
         // Draw the circle inside the 64x64 tile
         this.selectionCircle.strokeCircle(0, -32, 18);
+    }
+
+    public takeDamage(amount: number) {
+        if (this.currentHealth <= 0) return;
+        
+        this.currentHealth -= amount;
+        
+        // Generic shake effect on hit
+        this.scene.tweens.add({
+            targets: this.mainSprite,
+            x: 4, // local offset
+            duration: 50,
+            yoyo: true,
+            repeat: 3,
+            onComplete: () => {
+                this.mainSprite.x = 0; // Container local space reset
+            }
+        });
+
+        if (this.currentHealth <= 0) {
+            this.onDeath();
+        }
+    }
+
+    protected onDeath() {
+        // Optional override for child classes
     }
 
     // Abstract method to be implemented by child classes

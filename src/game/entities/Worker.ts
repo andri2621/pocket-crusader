@@ -81,8 +81,8 @@ export class Worker extends BaseUnit {
             callback: () => {
                 if (!this.targetResource) return;
                 
-                const yieldAmount = this.targetResource.takeDamage(1);
-                this.carriedWood += yieldAmount;
+                this.targetResource.takeDamage(1);
+                this.carriedWood += this.targetResource.yieldPerHit;
                 
                 if (this.targetResource.currentHealth <= 0) {
                     this.collectResource();

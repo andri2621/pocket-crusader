@@ -6,6 +6,8 @@ import { InteractionManager } from '../managers/InteractionManager';
 import { Worker } from '../entities/Worker';
 import { ResourceEntity } from '../entities/ResourceEntity';
 import { BuildingEntity } from '../entities/BuildingEntity';
+import { Stronghold } from '../entities/Stronghold';
+import { King } from '../entities/King';
 import { useGameStore } from '../../store/useGameStore';
 
 const MAP_WIDTH = GRID_COLS * TILE_SIZE;
@@ -77,12 +79,23 @@ export class GameScene extends Scene {
             this.gridManager.blockTile(obs.col, obs.row);
         }
 
-        // Spawn initial Woodcutter Hut
-        // (If we had one in the previous setup, we place it here. For now, empty or dynamic)
+        // Spawn Stronghold
+        const stronghold = new Stronghold({ scene: this, col: 15, row: 9, texture: 'castle' });
+        this.entityManager.addBuilding(stronghold);
+        
+        // Block 5x2 area: col-2 to col+2, row-1 to row
+        // So for col 15, row 9: startCol 13, startRow 8, width 5, height 2
+        this.gridManager.blockArea(13, 8, 5, 2);
 
-        // Spawn Worker
-        const worker = new Worker({ scene: this, col: 2, row: 2, texture: 'pawn-idle' });
-        this.entityManager.addUnit(worker);
+        // Spawn King
+        const king = new King({ scene: this, col: 14, row: 9, texture: 'pawn-idle' });
+        this.entityManager.addUnit(king);
+
+        // Spawn initial Workers
+        const worker1 = new Worker({ scene: this, col: 14, row: 10, texture: 'pawn-idle' });
+        const worker2 = new Worker({ scene: this, col: 17, row: 10, texture: 'pawn-idle' });
+        this.entityManager.addUnit(worker1);
+        this.entityManager.addUnit(worker2);
     }
 
     private updateBuildingGhost() {
