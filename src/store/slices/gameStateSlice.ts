@@ -5,7 +5,10 @@ export interface GameStateSlice {
     setGameOver: (isOver: boolean) => void;
     currentPopulation: number;
     maxPopulation: number;
-    setPopulation: (current: number, max: number) => void;
+    availableWorkersCount: number;
+    workerCount: number;
+    warriorCount: number;
+    setPopulation: (current: number, max: number, availableWorkers: number, workers: number, warriors: number) => void;
 }
 
 export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
@@ -13,5 +16,9 @@ export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
     setGameOver: (isOver: boolean) => set({ isGameOver: isOver }),
     currentPopulation: 0,
     maxPopulation: 5,
-    setPopulation: (current: number, max: number) => set({ currentPopulation: current, maxPopulation: max }),
+    availableWorkersCount: 0,
+    workerCount: 0,
+    warriorCount: 0,
+    setPopulation: (current: number, max: number, availableWorkers: number, workers: number, warriors: number) => 
+        set({ currentPopulation: current, maxPopulation: max, availableWorkersCount: availableWorkers, workerCount: workers, warriorCount: warriors }),
 });

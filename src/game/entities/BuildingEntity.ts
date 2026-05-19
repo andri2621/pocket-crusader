@@ -45,7 +45,7 @@ export class BuildingEntity extends BaseBuilding {
         if (!this.isCompleted) return;
 
         if (!this.occupancyLabel) {
-            this.occupancyLabel = this.scene.add.text(0, -90, '', {
+            this.occupancyLabel = this.scene.add.text(0, -50, '', {
                 fontFamily: 'Arial',
                 fontSize: '12px',
                 color: '#ffffff',
@@ -55,7 +55,7 @@ export class BuildingEntity extends BaseBuilding {
             this.add(this.occupancyLabel);
         }
 
-        this.occupancyLabel.setText(`👤 ${this.assignedWorkers.length}/${this.maxWorkers}`);
+        this.occupancyLabel.setText(`${this.assignedWorkers.length}/${this.maxWorkers}`);
     }
 
     public override completeConstruction() {

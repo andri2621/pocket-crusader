@@ -6,7 +6,8 @@ export type WorkerState =
     | "DEPOSITING"
     | "CONSTRUCTING"
     | "MINING"
-    | "ATTACK";
+    | "ATTACK"
+    | "MOVING_TO_TRAIN";
 
 export type ResourceType = "wood" | "gold" | "stone";
 

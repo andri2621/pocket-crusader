@@ -5,6 +5,7 @@ import { BaseUnit } from '../entities/base/BaseUnit';
 import { BaseResource } from '../entities/base/BaseResource';
 import { BaseBuilding } from '../entities/base/BaseBuilding';
 import { Worker } from '../entities/Worker';
+import { Warrior } from '../entities/Warrior';
 import { House } from '../entities/House';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { GoldHut } from '../entities/GoldHut';
@@ -44,6 +45,12 @@ export class InteractionManager {
 
         this.tapIndicator = this.scene.add.graphics();
         this.tapIndicator.setDepth(5);
+
+        // Listen for force-deselect events (e.g. after disband)
+        this.scene.events.on('force_deselect_unit', () => {
+            this.selectedUnit = null;
+            useGameStore.getState().setSelectedUnit(null, null);
+        });
 
         this.scene.events.on('resource_collected', (worker: Worker) => {
             this.handleResourceCollected(worker);
@@ -310,7 +317,8 @@ export class InteractionManager {
             // If it's a barracks, also sync its queue immediately
             if (hitBuilding instanceof Barracks) {
                 const b = hitBuilding as any;
-                store.setTrainingState([...b.trainingQueue], b.currentTrainingProgress);
+                const uiQueue = b.trainingRecruits.map((r: any) => r.unitType);
+                store.setTrainingState(uiQueue, b.currentTrainingProgress);
             } else {
                 store.setTrainingState([], 0);
             }
@@ -471,13 +479,19 @@ export class InteractionManager {
         this.deselectUnit();
         this.selectedUnit = unit;
         unit.setSelected(true);
+
+        // Sync to React store
+        const unitType = unit instanceof Warrior ? 'warrior' : unit instanceof Worker ? 'worker' : 'unit';
+        useGameStore.getState().setSelectedUnit(unit.id, unitType);
     }
 
     public deselectUnit() {
         if (this.selectedUnit) {
-            this.selectedUnit.setSelected(false);
+            // Guard: only call setSelected if the object hasn't been destroyed
+            try { this.selectedUnit.setSelected(false); } catch (_e) { /* destroyed */ }
             this.selectedUnit = null;
         }
+        useGameStore.getState().setSelectedUnit(null, null);
     }
 
     private showTapIndicator(col: number, row: number) {

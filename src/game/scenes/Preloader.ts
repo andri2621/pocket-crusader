@@ -179,6 +179,13 @@ export class Preloader extends Scene
         // ── UI Elements ─────────────────────────────────────
         this.load.image('avatar_warrior_blue', 'UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png');
         this.load.image('avatar_pawn_blue', 'UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png');
+        
+        // ── Icons ───────────────────────────────────────────
+        this.load.image('icon_coin', 'UI Elements/UI Elements/Icons/coin.png');
+        this.load.image('icon_log', 'UI Elements/UI Elements/Icons/log.png');
+        this.load.image('icon_sword', 'UI Elements/UI Elements/Icons/sword.png');
+        this.load.image('icon_hammer', 'UI Elements/UI Elements/Icons/hammer.png');
+        this.load.image('icon_meat', 'UI Elements/UI Elements/Icons/meat.png');
     }
 
     create ()

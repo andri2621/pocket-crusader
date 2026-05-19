@@ -28,7 +28,7 @@ export class Worker extends BaseUnit {
 
     public override get canWander(): boolean {
         // Workers should not wander if they are assigned to a construction job,
-        // carrying wood, or assigned to automate a hut.
+        // carrying wood, assigned to automate a hut, or walking to barracks.
         return this.workerState === 'IDLE' && !this.isConstructionJob && !this.isCarrying && !this.assignedHut;
     }
 
@@ -111,6 +111,10 @@ export class Worker extends BaseUnit {
                 } else {
                     this.mainSprite.play('pawn-run');
                 }
+                break;
+            case 'MOVING_TO_TRAIN':
+                this.mainSprite.play('pawn-run');
+                this.disableInteractive(); // Draft lock
                 break;
             case 'CHOPPING':
                 this.mainSprite.play('pawn-chop');
@@ -260,7 +264,7 @@ export class Worker extends BaseUnit {
                 this.targetBuilding.addProgress(10);
 
                 // Check if building completed after this tick
-                if (this.targetBuilding.isCompleted) {
+                if (this.targetBuilding?.isCompleted) {
                     this.cancelBuilding();
                     this.setWorkerState('IDLE');
                 }
@@ -311,5 +315,28 @@ export class Worker extends BaseUnit {
      */
     public isAssignedToBuilding(building: BaseBuilding): boolean {
         return this.targetBuilding === building && this.isConstructionJob;
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  MILITARY TRANSFORMATION & DRAFTING
+    // ══════════════════════════════════════════════════════════
+
+    public clearCarriedResource(): void {
+        this.clearInventory();
+    }
+
+    public hideForTraining(): void {
+        this.setActive(false);
+        this.setVisible(false);
+        this.disableInteractive();
+    }
+
+    public showFromTraining(): void {
+        this.setActive(true);
+        this.setVisible(true);
+        this.setInteractive(
+            new Phaser.Geom.Rectangle(-32, -64, 64, 64),
+            Phaser.Geom.Rectangle.Contains
+        );
     }
 }

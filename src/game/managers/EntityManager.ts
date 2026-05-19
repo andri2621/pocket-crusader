@@ -31,18 +31,96 @@ export class EntityManager {
         });
 
         // Listen for React UI 'train_warrior' event
+        EventBus.off('train_warrior'); // Prevent stacking
         EventBus.on('train_warrior', (barracksId: string) => {
             const barracks = this.buildings.find(b => b.id === barracksId) as any;
-            if (barracks && barracks.addToQueue) {
-                barracks.addToQueue('warrior');
+            if (barracks && barracks.addWorkerToQueue) {
+                // Drafting Priority 1: IDLE or WANDERING (not assigned, not building)
+                let draftedWorker = this.units.find(u => 
+                    u instanceof Worker && 
+                    !u.isConstructionJob && 
+                    !u.assignedHut && 
+                    (u.workerState === 'IDLE' || (u.workerState === 'MOVING' && !u.isCarryingWood))
+                ) as Worker;
+                
+                // Drafting Priority 2: Hijack from Hut Automation
+                if (!draftedWorker) {
+                    draftedWorker = this.units.find(u => 
+                        u instanceof Worker && 
+                        !u.isConstructionJob && 
+                        u.assignedHut && 
+                        u.workerState !== 'MOVING_TO_TRAIN'
+                    ) as Worker;
+
+                    if (draftedWorker) {
+                        // HIJACK ACTION
+                        draftedWorker.cancelHutAutomation();
+                        draftedWorker.clearCarriedResource();
+                    }
+                }
+
+                if (draftedWorker) {
+                    this.dispatchWorkerToTrain(draftedWorker, barracks);
+                } else {
+                    // No eligible pawns! Refund and reject.
+                    useGameStore.getState().addGold(20);
+                }
             }
         });
 
         // Listen for React UI 'cancel_training' event
+        EventBus.off('cancel_training'); // Prevent stacking
         EventBus.on('cancel_training', (payload: { id: string, index: number }) => {
             const barracks = this.buildings.find(b => b.id === payload.id) as any;
             if (barracks && barracks.cancelQueueItem) {
                 barracks.cancelQueueItem(payload.index);
+            }
+        });
+
+        // Listen for internal worker cancellation
+        this.scene.events.on('cancel_worker_training', (workerId: string) => {
+            const worker = this.units.find(u => u.id === workerId) as Worker;
+            if (worker) {
+                worker.showFromTraining();
+                worker.setWorkerState('IDLE');
+            }
+        });
+
+        // Listen for internal worker graduation
+        this.scene.events.on('worker_graduated', (workerId: string) => {
+            const workerIndex = this.units.findIndex(u => u.id === workerId);
+            if (workerIndex !== -1) {
+                const worker = this.units[workerIndex] as Worker;
+                worker.cancelMovement(); // Stop any active tween chains first
+                worker.destroy();
+                this.units.splice(workerIndex, 1);
+            }
+        });
+
+        // Listen for disband warrior event (from React HUD)
+        EventBus.off('disband_warrior'); // Prevent stacking
+        EventBus.on('disband_warrior', (warriorId: string) => {
+            const warriorIndex = this.units.findIndex(u => u.id === warriorId);
+            if (warriorIndex !== -1) {
+                const warrior = this.units[warriorIndex] as Warrior;
+                const col = warrior.gridX;
+                const row = warrior.gridY;
+                
+                // Force-clear InteractionManager's selectedUnit BEFORE destroying
+                this.scene.events.emit('force_deselect_unit');
+
+                warrior.cancelMovement();
+                warrior.destroy();
+                this.units.splice(warriorIndex, 1);
+
+                // Spawn a new Worker at the same position
+                const worker = new Worker({
+                    scene: this.scene,
+                    col: col,
+                    row: row,
+                    texture: 'pawn-idle'
+                });
+                this.addUnit(worker); // Also calls recalculatePopulation
             }
         });
     }
@@ -74,10 +152,22 @@ export class EntityManager {
         }
 
         // Population spawn check (every 10s)
-        this.spawnTimer += delta;
-        if (this.spawnTimer >= 10000) {
-            this.spawnTimer = 0;
-            this.checkPopulationAndSpawn();
+        const store = useGameStore.getState();
+        if (store.currentPopulation < store.maxPopulation) {
+            this.spawnTimer += delta;
+            if (this.spawnTimer >= 10000) {
+                this.spawnTimer = 0;
+                this.checkPopulationAndSpawn();
+            }
+        } else {
+            this.spawnTimer = 0; // Reset timer if pop is capped
+        }
+
+        // Sync Spawn Timer to Stronghold
+        const stronghold = this.buildings.find(b => b.buildingType === 'stronghold') as any;
+        if (stronghold && stronghold.updateSpawnBar) {
+            const isSpawning = store.currentPopulation < store.maxPopulation;
+            stronghold.updateSpawnBar(isSpawning ? this.spawnTimer / 10000 : 0, isSpawning);
         }
 
         // Auto-assign idle workers to unfinished buildings (every 2s)
@@ -100,12 +190,22 @@ export class EntityManager {
         const completedHouses = this.buildings.filter(b => b.buildingType === 'house' && b.isCompleted).length;
         const maxPop = 5 + (completedHouses * 5);
         const currentPop = this.units.filter(u => u instanceof Worker || u instanceof Warrior).length;
-        store.setPopulation(currentPop, maxPop);
-        return { currentPop, maxPop };
+        
+        const availableWorkers = this.units.filter(u => 
+            u instanceof Worker && 
+            !u.isConstructionJob && 
+            u.workerState !== 'MOVING_TO_TRAIN'
+        ).length;
+        
+        const workerCount = this.units.filter(u => u instanceof Worker).length;
+        const warriorCount = this.units.filter(u => u instanceof Warrior).length;
+        
+        store.setPopulation(currentPop, maxPop, availableWorkers, workerCount, warriorCount);
+        return { currentPop, maxPop, availableWorkers, workerCount, warriorCount };
     }
 
     private checkPopulationAndSpawn() {
-        const { currentPop, maxPop } = this.recalculatePopulation();
+        const { currentPop, maxPop, availableWorkers } = this.recalculatePopulation();
         const store = useGameStore.getState();
 
         if (currentPop < maxPop) {
@@ -123,7 +223,6 @@ export class EntityManager {
                     texture: 'pawn-idle' 
                 });
                 this.addUnit(worker);
-                store.setPopulation(currentPop + 1, maxPop);
             }
         }
     }
@@ -133,9 +232,15 @@ export class EntityManager {
      * Immediately recalculates population to reflect the new house.
      */
     private onBuildingCompleted(building: BaseBuilding) {
-        if (building.buildingType === 'house') {
-            this.recalculatePopulation();
+        // Force all workers assigned to this building to cancel and become IDLE immediately.
+        // This ensures they are no longer marked as 'isConstructionJob' when we recalculate population.
+        for (const unit of this.units) {
+            if (unit instanceof Worker && unit.isConstructionJob && unit.assignedBuildingId === building.id) {
+                unit.cancelBuilding();
+                unit.setWorkerState('IDLE');
+            }
         }
+        this.recalculatePopulation();
     }
 
     // ══════════════════════════════════════════════════════════
@@ -293,6 +398,56 @@ export class EntityManager {
                     });
                 } else {
                     worker.cancelHutAutomation();
+                }
+            });
+        }
+    }
+
+    /**
+     * Dispatch a worker to the Barracks for training.
+     */
+    public dispatchWorkerToTrain(worker: Worker, barracks: any) {
+        worker.setWorkerState('MOVING_TO_TRAIN');
+        this.recalculatePopulation(); // Update available workers
+        
+        // Add to queue immediately for UI feedback
+        barracks.addWorkerToQueue(worker.id, 'warrior');
+
+        const startPos = { col: worker.gridX, row: worker.gridY };
+        const adjTile = this.findAdjacentToBuilding(barracks, startPos);
+        
+        if (!adjTile) {
+            const index = barracks.trainingRecruits.findIndex((r: any) => r.workerId === worker.id);
+            if (index !== -1) barracks.cancelQueueItem(index);
+            return;
+        }
+        
+        const isAdjacent = this.isAdjacentToBuilding(worker, barracks);
+        
+        if (isAdjacent) {
+            worker.hideForTraining();
+            barracks.startTrainingWorker(worker.id);
+        } else {
+            this.gridManager.findPath(startPos, adjTile, (path) => {
+                // Check queue membership instead of workerState (moveAlongPath overrides state to 'MOVING')
+                const stillInQueue = barracks.trainingRecruits.some((r: any) => r.workerId === worker.id);
+                if (path && stillInQueue) {
+                    worker.moveAlongPath(path, () => {
+                        // On arrival: check queue membership again (could have been cancelled mid-walk)
+                        const stillQueued = barracks.trainingRecruits.some((r: any) => r.workerId === worker.id);
+                        if (stillQueued) {
+                            worker.hideForTraining();
+                            barracks.startTrainingWorker(worker.id);
+                        }
+                    });
+                    // Re-apply MOVING_TO_TRAIN after moveAlongPath (which resets to 'MOVING')
+                    worker.setWorkerState('MOVING_TO_TRAIN');
+                } else {
+                    // Pathfinding failed, cancel it
+                    const index = barracks.trainingRecruits.findIndex((r: any) => r.workerId === worker.id);
+                    if (index !== -1) {
+                        barracks.cancelQueueItem(index);
+                    }
                 }
             });
         }

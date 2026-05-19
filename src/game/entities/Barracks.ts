@@ -8,16 +8,17 @@ export class Barracks extends BaseBuilding {
     private trainingTimer: Phaser.Time.TimerEvent | null = null;
     
     // Queue System
-    public trainingQueue: string[] = [];
+    public trainingRecruits: { workerId: string, unitType: string, status: 'walking' | 'training' }[] = [];
     public currentTrainingProgress: number = 0;
     
     // UI Progress Bar for training
     private trainingProgressBarBg: Phaser.GameObjects.Graphics;
     private trainingProgressBarFill: Phaser.GameObjects.Graphics;
+    private queueLabel: Phaser.GameObjects.Text;
     
     private static readonly TRAINING_BAR_WIDTH = 40;
     private static readonly TRAINING_BAR_HEIGHT = 6;
-    private static readonly TRAINING_BAR_OFFSET_Y = -120; // High above the barracks
+    private static readonly TRAINING_BAR_OFFSET_Y = -90; // High above the barracks
 
     constructor(config: EntityConfig) {
         super({
@@ -46,6 +47,18 @@ export class Barracks extends BaseBuilding {
 
         this.trainingProgressBarBg.setVisible(false);
         this.trainingProgressBarFill.setVisible(false);
+
+        // Queue Text Indicator
+        this.queueLabel = this.scene.add.text(0, -105, '', {
+            fontFamily: 'Arial',
+            fontSize: '14px',
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 3,
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.add(this.queueLabel);
+        this.queueLabel.setVisible(false);
     }
 
     /**
@@ -59,25 +72,35 @@ export class Barracks extends BaseBuilding {
         this.setDepth(this.y);
     }
 
-    public addToQueue(unitType: string) {
+    public addWorkerToQueue(workerId: string, unitType: string) {
         if (!this.isCompleted) return;
         
-        // Cost is handled before calling this, or handle here. 
-        // We handle deduct in App.tsx but let's make sure it syncs.
-        // Actually, since we deduct in App.tsx (💰20), we don't deduct here.
-        this.trainingQueue.push(unitType);
+        // Prevent duplicate entries for the same worker
+        if (this.trainingRecruits.some(r => r.workerId === workerId)) return;
         
-        // Sync to UI if selected
+        this.trainingRecruits.push({ workerId, unitType, status: 'walking' });
         this.syncQueueToStore();
+        this.updateQueueLabel();
+    }
+
+    public startTrainingWorker(workerId: string) {
+        const recruit = this.trainingRecruits.find(r => r.workerId === workerId);
+        if (recruit) {
+            recruit.status = 'training';
+            this.processQueue();
+        }
     }
 
     public cancelQueueItem(index: number) {
-        if (index < 0 || index >= this.trainingQueue.length) return;
+        if (index < 0 || index >= this.trainingRecruits.length) return;
+
+        const recruit = this.trainingRecruits[index];
+        this.scene.events.emit('cancel_worker_training', recruit.workerId);
 
         // Refund Gold
         useGameStore.getState().addGold(20);
 
-        if (index === 0) {
+        if (index === 0 && recruit.status === 'training') {
             // Cancel current training
             if (this.trainingTimer) {
                 this.trainingTimer.destroy();
@@ -89,14 +112,25 @@ export class Barracks extends BaseBuilding {
             this.trainingProgressBarFill.setVisible(false);
         }
 
-        this.trainingQueue.splice(index, 1);
+        this.trainingRecruits.splice(index, 1);
         this.syncQueueToStore();
+        this.updateQueueLabel();
+    }
+
+    private updateQueueLabel() {
+        if (this.trainingRecruits.length > 0) {
+            this.queueLabel.setText(`x${this.trainingRecruits.length}`);
+            this.queueLabel.setVisible(true);
+        } else {
+            this.queueLabel.setVisible(false);
+        }
     }
 
     private syncQueueToStore() {
         const store = useGameStore.getState();
         if (store.selectedBuildingId === this.id) {
-            store.setTrainingState([...this.trainingQueue], this.currentTrainingProgress);
+            const uiQueue = this.trainingRecruits.map(r => r.unitType);
+            store.setTrainingState(uiQueue, this.currentTrainingProgress);
         }
     }
 
@@ -107,31 +141,51 @@ export class Barracks extends BaseBuilding {
         this.trainingProgressBarBg.setVisible(false);
         this.trainingProgressBarFill.setVisible(false);
         
-        const trainedUnit = this.trainingQueue.shift(); // Remove completed item
-        if (trainedUnit === 'warrior') {
-            this.scene.events.emit('warrior_trained', this);
+        const trainedRecruit = this.trainingRecruits.shift(); // Remove completed item
+        if (trainedRecruit) {
+            // Tell EntityManager to completely destroy the worker, and spawn warrior
+            this.scene.events.emit('worker_graduated', trainedRecruit.workerId);
+            if (trainedRecruit.unitType === 'warrior') {
+                this.scene.events.emit('warrior_trained', this);
+            }
         }
-        
+
         this.syncQueueToStore();
+        this.updateQueueLabel();
+
+        // Defer processQueue to next frame — Phaser TimerEvent callbacks cannot
+        // reliably create a new TimerEvent in the same call stack.
+        if (this.trainingRecruits.length > 0) {
+            this.scene.time.delayedCall(0, () => {
+                this.processQueue();
+            });
+        }
+    }
+
+    private processQueue() {
+        if (this.trainingRecruits.length > 0 && !this.isTraining && this.isCompleted) {
+            const firstRecruit = this.trainingRecruits[0];
+            if (firstRecruit.status === 'training') {
+                this.isTraining = true;
+                this.currentTrainingProgress = 0;
+                this.trainingProgressBarBg.setVisible(true);
+                this.trainingProgressBarFill.setVisible(true);
+                
+                const trainingDuration = 10000;
+                
+                this.trainingTimer = this.scene.time.addEvent({
+                    delay: trainingDuration,
+                    callback: this.onTrainingComplete,
+                    callbackScope: this
+                });
+            }
+        }
     }
 
     public override update(time: number, delta: number): void {
         super.update(time, delta);
         
-        // Queue processing
-        if (this.trainingQueue.length > 0 && !this.isTraining && this.isCompleted) {
-            this.isTraining = true;
-            this.trainingProgressBarBg.setVisible(true);
-            this.trainingProgressBarFill.setVisible(true);
-            
-            const trainingDuration = 10000;
-            
-            this.trainingTimer = this.scene.time.addEvent({
-                delay: trainingDuration,
-                callback: this.onTrainingComplete,
-                callbackScope: this
-            });
-        }
+        this.processQueue();
         
         if (this.isTraining && this.trainingTimer) {
             this.currentTrainingProgress = this.trainingTimer.getOverallProgress();
@@ -142,7 +196,8 @@ export class Barracks extends BaseBuilding {
             if (store.selectedBuildingId === this.id) {
                 // To avoid React re-renders every frame, we only update store if progress changed significantly
                 // OR we can just rely on Phaser update. For now, sync.
-                store.setTrainingState([...this.trainingQueue], this.currentTrainingProgress);
+                const uiQueue = this.trainingRecruits.map(r => r.unitType);
+                store.setTrainingState(uiQueue, this.currentTrainingProgress);
             }
         }
     }

@@ -49,7 +49,7 @@ export class GoldHut extends BaseBuilding {
 
         if (!this.occupancyLabel) {
             // Position above the roof
-            this.occupancyLabel = this.scene.add.text(0, -90, '', {
+            this.occupancyLabel = this.scene.add.text(0, -50, '', {
                 fontFamily: 'Arial',
                 fontSize: '12px',
                 color: '#ffffff',
@@ -59,7 +59,7 @@ export class GoldHut extends BaseBuilding {
             this.add(this.occupancyLabel);
         }
 
-        this.occupancyLabel.setText(`👤 ${this.assignedWorkers.length}/${this.maxWorkers}`);
+        this.occupancyLabel.setText(`${this.assignedWorkers.length}/${this.maxWorkers}`);
     }
 
     public override completeConstruction() {

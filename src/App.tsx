@@ -25,7 +25,6 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
                         disabled={!canAffordHouse}
                         onClick={() => { if (canAffordHouse) setPlacing('house'); }}
                     >
-                        <span className={styles.buildCardIcon}>🏘️</span>
                         <span className={styles.buildCardLabel}>House</span>
                         <span className={styles.buildCardCost}>🪵 30</span>
                     </button>
@@ -34,7 +33,6 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
                         disabled={!canAffordHut}
                         onClick={() => { if (canAffordHut) setPlacing('woodcutter_hut'); }}
                     >
-                        <span className={styles.buildCardIcon}>🏠</span>
                         <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
                         <span className={styles.buildCardCost}>🪵 50</span>
                     </button>
@@ -43,7 +41,6 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
                         disabled={!canAffordHut}
                         onClick={() => { if (canAffordHut) setPlacing('gold_hut'); }}
                     >
-                        <span className={styles.buildCardIcon}>⛏️</span>
                         <span className={styles.buildCardLabel}>Gold Hut</span>
                         <span className={styles.buildCardCost}>🪵 50</span>
                     </button>
@@ -52,7 +49,6 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
                         disabled={!canAffordBarracks}
                         onClick={() => { if (canAffordBarracks) setPlacing('barracks'); }}
                     >
-                        <span className={styles.buildCardIcon}>⚔️</span>
                         <span className={styles.buildCardLabel}>Barracks</span>
                         <span className={styles.buildCardCost}>🪵 50 💰 50</span>
                     </button>
@@ -65,16 +61,44 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
 function SelectionPanel() {
     const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
     const selectedBuildingType = useGameStore((s) => s.selectedBuildingType);
+    const selectedUnitId = useGameStore((s) => s.selectedUnitId);
+    const selectedUnitType = useGameStore((s) => s.selectedUnitType);
     const trainingQueue = useGameStore((s) => s.trainingQueue);
     const trainingProgress = useGameStore((s) => s.trainingProgress);
     const gold = useGameStore((s) => s.gold);
-    const currentPop = useGameStore((s) => s.currentPopulation);
-    const maxPop = useGameStore((s) => s.maxPopulation);
+    const availableWorkers = useGameStore((s) => s.availableWorkersCount);
 
+    // ── Warrior Disband Panel ──
+    if (selectedUnitType === 'warrior' && selectedUnitId) {
+        const handleDisband = () => {
+            EventBus.emit('disband_warrior', selectedUnitId);
+        };
+
+        return (
+            <div className={styles.selectionPanel}>
+                <div className={styles.selectionContent}>
+                    <div className={styles.portraitContainer}>
+                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" className={styles.portraitImage} alt="Warrior" />
+                    </div>
+                    <div className={styles.selectionInfo}>
+                        <h3 className={styles.selectionTitle}>Warrior</h3>
+                        <div className={styles.selectionActions}>
+                            <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={handleDisband}>
+                                Disband
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Barracks Panel ──
     if (!selectedBuildingId) return null;
 
     const handleTrainWarrior = () => {
-        if (gold >= 20 && (currentPop + trainingQueue.length) < maxPop) {
+        // Safety Net: Must keep at least 1 worker in the economy
+        if (gold >= 20 && availableWorkers > 1) {
             useGameStore.getState().addGold(-20);
             EventBus.emit('train_warrior', selectedBuildingId);
         }
@@ -88,6 +112,10 @@ function SelectionPanel() {
     const radius = 22;
     const circumference = 2 * Math.PI * radius;
     const strokeDashoffset = circumference - (trainingProgress * circumference);
+
+    // Safety net: disable if only 1 worker left or no gold
+    const canTrain = gold >= 20 && availableWorkers > 1;
+    const safetyWarning = availableWorkers <= 1 && gold >= 20;
 
     if (selectedBuildingType === 'barracks') {
         const warriorCount = trainingQueue.filter(u => u === 'warrior').length;
@@ -135,13 +163,18 @@ function SelectionPanel() {
                         <h3 className={styles.selectionTitle}>Barracks</h3>
                         <div className={styles.selectionActions}>
                             <button 
-                                className={`${styles.actionBtn} ${(gold < 20 || currentPop + trainingQueue.length >= maxPop) ? styles.actionBtnDisabled : ''}`}
-                                disabled={gold < 20 || currentPop + trainingQueue.length >= maxPop}
+                                className={`${styles.actionBtn} ${!canTrain ? styles.actionBtnDisabled : ''}`}
+                                disabled={!canTrain}
                                 onClick={handleTrainWarrior}
                             >
-                                ⚔️ Train (💰20)
+                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/sword.png" alt="Train" className={styles.btnIconImg} />
+                                Train 
+                                <span className={styles.btnCost}>(20 <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.btnIconSmallImg} />)</span>
                             </button>
                         </div>
+                        {safetyWarning && (
+                            <div className={styles.safetyWarning}>Need at least 1 worker for economy</div>
+                        )}
                     </div>
 
                     {/* Queue Strip */}
@@ -174,6 +207,8 @@ function App() {
     const gold = useGameStore((state) => state.gold);
     const currentPop = useGameStore((state) => state.currentPopulation);
     const maxPop = useGameStore((state) => state.maxPopulation);
+    const workerCount = useGameStore((state) => state.workerCount);
+    const warriorCount = useGameStore((state) => state.warriorCount);
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
 
     useEffect(() => {
@@ -268,11 +303,11 @@ function App() {
                         {/* Resources Section */}
                         <div className={styles.hudSection}>
                             <div className={styles.hudItem}>
-                                <span className={styles.hudIcon}>🪵</span>
+                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{wood}</span>
                             </div>
                             <div className={styles.hudItem} style={{ marginLeft: '12px' }}>
-                                <span className={styles.hudIcon}>💰</span>
+                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{gold}</span>
                             </div>
                         </div>
@@ -282,7 +317,7 @@ function App() {
                         {/* Population Section */}
                         <div className={styles.hudSection}>
                             <div className={styles.hudItem}>
-                                <span className={styles.hudIcon}>👥</span>
+                                <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Gold" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{currentPop}/{maxPop}</span>
                             </div>
                         </div>
@@ -291,7 +326,7 @@ function App() {
 
                         {/* Build Button */}
                         <button className={styles.hudBuildBtn} onClick={() => useGameStore.getState().toggleBuildMenu()}>
-                            🔨
+                            <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/hammer.png" alt="Build" className={styles.hudIconImg} />
                         </button>
                     </div>
 
@@ -299,9 +334,11 @@ function App() {
                     <div className={styles.quickSidebar}>
                         <div className={styles.quickSidebarItem}>
                             <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Workers" />
+                            <div className={styles.stackBadge}>{workerCount}</div>
                         </div>
                         <div className={styles.quickSidebarItem}>
                             <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt="Warriors" />
+                            <div className={styles.stackBadge}>{warriorCount}</div>
                         </div>
                     </div>
 

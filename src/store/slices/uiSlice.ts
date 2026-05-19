@@ -9,6 +9,11 @@ export interface UISlice {
     selectedBuildingType: string | null;
     setSelectedBuilding: (id: string | null, type: string | null) => void;
     
+    // Unit Selection State
+    selectedUnitId: string | null;
+    selectedUnitType: string | null; // 'worker' | 'warrior' | 'king' | null
+    setSelectedUnit: (id: string | null, type: string | null) => void;
+
     // Training Queue State
     trainingQueue: string[];
     trainingProgress: number;
@@ -24,6 +29,10 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
     selectedBuildingType: null,
     setSelectedBuilding: (id: string | null, type: string | null) => set({ selectedBuildingId: id, selectedBuildingType: type }),
     
+    selectedUnitId: null,
+    selectedUnitType: null,
+    setSelectedUnit: (id: string | null, type: string | null) => set({ selectedUnitId: id, selectedUnitType: type }),
+
     trainingQueue: [],
     trainingProgress: 0,
     setTrainingState: (queue: string[], progress: number) => set({ trainingQueue: queue, trainingProgress: progress }),

@@ -8,8 +8,8 @@ export interface ResourceSlice {
 }
 
 export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
-    wood: 100,
-    gold: 100,
+    wood: 300,
+    gold: 300,
     addWood: (amount: number) => set((state) => ({ wood: state.wood + amount })),
     addGold: (amount: number) => set((state) => ({ gold: state.gold + amount })),
 });
