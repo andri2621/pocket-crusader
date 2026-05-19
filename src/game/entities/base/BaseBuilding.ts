@@ -17,6 +17,7 @@ export abstract class BaseBuilding extends BaseEntity {
     public isUnderConstruction: boolean = true;
     private progressBarBg: Phaser.GameObjects.Graphics;
     private progressBarFill: Phaser.GameObjects.Graphics;
+    private constructionTiles: Phaser.GameObjects.Image[] = [];
 
     private static readonly BAR_WIDTH = 40;
     private static readonly BAR_HEIGHT = 6;
@@ -40,6 +41,12 @@ export abstract class BaseBuilding extends BaseEntity {
         // Initially hidden — shown only when 0 < progress < 100
         this.progressBarBg.setVisible(false);
         this.progressBarFill.setVisible(false);
+
+        // Hide main sprite initially if under construction
+        if (this.isUnderConstruction) {
+            this.mainSprite.setVisible(false);
+            this.createConstructionGrid();
+        }
     }
 
     public get availableBuilderSpots(): number {
@@ -58,6 +65,24 @@ export abstract class BaseBuilding extends BaseEntity {
         this.currentBuilders = this.currentBuilders.filter(id => id !== workerId);
     }
 
+    private createConstructionGrid() {
+        for (let r = 0; r < this.footprint.height; r++) {
+            for (let c = 0; c < this.footprint.width; c++) {
+                // Scene level positioning for proper z-sorting against workers
+                const tileX = (this.gridX + c) * 64 + 32;
+                const tileY = (this.gridY + r) * 64 + 64;
+
+                const tile = this.scene.add.image(tileX, tileY, 'house_construction');
+                tile.setOrigin(0.5, 0.9);
+                tile.setScale(0.75);
+                tile.setDepth(tileY);
+                tile.setTint(0x888888); // Start completely grey
+                
+                this.constructionTiles.push(tile);
+            }
+        }
+    }
+
     /**
      * Add progress to the building's construction.
      * Multiple workers can call this simultaneously to speed up.
@@ -67,9 +92,28 @@ export abstract class BaseBuilding extends BaseEntity {
 
         this.progress = Math.min(this.progress + amount, 100);
         this.updateProgressBar();
+        this.updateConstructionVisuals();
 
         if (this.progress >= 100) {
             this.completeConstruction();
+        }
+    }
+
+    private updateConstructionVisuals() {
+        if (this.constructionTiles.length === 0) return;
+
+        // How much progress is needed per tile
+        const threshold = 100 / this.constructionTiles.length;
+        
+        // Calculate how many tiles should be "untinted"
+        const completedTiles = Math.floor(this.progress / threshold);
+
+        for (let i = 0; i < this.constructionTiles.length; i++) {
+            if (i < completedTiles) {
+                this.constructionTiles[i].clearTint();
+            } else {
+                this.constructionTiles[i].setTint(0x888888);
+            }
         }
     }
 
@@ -114,6 +158,14 @@ export abstract class BaseBuilding extends BaseEntity {
         this.isUnderConstruction = false;
         this.progress = 100;
         this.currentBuilders = []; // Clear builders
+        
+        // Destroy construction tiles
+        for (const tile of this.constructionTiles) {
+            tile.destroy();
+        }
+        this.constructionTiles = [];
+
+        this.mainSprite.setVisible(true);
         this.mainSprite.clearTint();
         this.setAlpha(1.0);
 

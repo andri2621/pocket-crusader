@@ -33,8 +33,16 @@ export class EntityManager {
         // Listen for React UI 'train_warrior' event
         EventBus.on('train_warrior', (barracksId: string) => {
             const barracks = this.buildings.find(b => b.id === barracksId) as any;
-            if (barracks && barracks.trainWarrior) {
-                barracks.trainWarrior();
+            if (barracks && barracks.addToQueue) {
+                barracks.addToQueue('warrior');
+            }
+        });
+
+        // Listen for React UI 'cancel_training' event
+        EventBus.on('cancel_training', (payload: { id: string, index: number }) => {
+            const barracks = this.buildings.find(b => b.id === payload.id) as any;
+            if (barracks && barracks.cancelQueueItem) {
+                barracks.cancelQueueItem(payload.index);
             }
         });
     }

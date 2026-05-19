@@ -302,14 +302,22 @@ export class InteractionManager {
             }
         }
 
-        // Handle Barracks Selection
+        // Handle Building Selection
         const store = useGameStore.getState();
-        if (hitBuilding instanceof Barracks) {
-            store.setSelectedBarracks(hitBuilding.id);
+        if (hitBuilding) {
+            store.setSelectedBuilding(hitBuilding.id, hitBuilding.buildingType);
+            
+            // If it's a barracks, also sync its queue immediately
+            if (hitBuilding instanceof Barracks) {
+                const b = hitBuilding as any;
+                store.setTrainingState([...b.trainingQueue], b.currentTrainingProgress);
+            } else {
+                store.setTrainingState([], 0);
+            }
         } else {
-            // Deselect barracks if tapped elsewhere
-            if (store.selectedBarracksId) {
-                store.setSelectedBarracks(null);
+            if (store.selectedBuildingId) {
+                store.setSelectedBuilding(null, null);
+                store.setTrainingState([], 0);
             }
         }
 

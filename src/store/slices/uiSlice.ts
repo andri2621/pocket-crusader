@@ -5,8 +5,14 @@ export interface UISlice {
     toggleBuildMenu: () => void;
     isPlacingBuilding: string | null;
     setPlacingBuilding: (type: string | null) => void;
-    selectedBarracksId: string | null;
-    setSelectedBarracks: (id: string | null) => void;
+    selectedBuildingId: string | null;
+    selectedBuildingType: string | null;
+    setSelectedBuilding: (id: string | null, type: string | null) => void;
+    
+    // Training Queue State
+    trainingQueue: string[];
+    trainingProgress: number;
+    setTrainingState: (queue: string[], progress: number) => void;
 }
 
 export const createUISlice: StateCreator<UISlice> = (set) => ({
@@ -14,6 +20,11 @@ export const createUISlice: StateCreator<UISlice> = (set) => ({
     toggleBuildMenu: () => set((state) => ({ isBuildMenuOpen: !state.isBuildMenuOpen })),
     isPlacingBuilding: null,
     setPlacingBuilding: (type: string | null) => set({ isPlacingBuilding: type, isBuildMenuOpen: false }),
-    selectedBarracksId: null,
-    setSelectedBarracks: (id: string | null) => set({ selectedBarracksId: id }),
+    selectedBuildingId: null,
+    selectedBuildingType: null,
+    setSelectedBuilding: (id: string | null, type: string | null) => set({ selectedBuildingId: id, selectedBuildingType: type }),
+    
+    trainingQueue: [],
+    trainingProgress: 0,
+    setTrainingState: (queue: string[], progress: number) => set({ trainingQueue: queue, trainingProgress: progress }),
 });

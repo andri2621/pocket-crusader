@@ -142,6 +142,7 @@ export class Preloader extends Scene
         });
 
         // ── Buildings ───────────────────────────────────────
+        this.load.image('house_construction', 'Buildings/Blue Buildings/House_Construction.png');
         this.load.image('house1', 'Buildings/Blue Buildings/House1.png');
         this.load.image('hut', 'Buildings/Blue Buildings/Hut.png');
         this.load.image('castle', 'Buildings/Blue Buildings/Castle.png');
@@ -174,6 +175,10 @@ export class Preloader extends Scene
         this.load.image('gold_stone_4', 'Terrain/Resources/Gold/Gold Stones/Gold Stone 4.png');
         this.load.image('gold_stone_5', 'Terrain/Resources/Gold/Gold Stones/Gold Stone 5.png');
         this.load.image('gold_stone_6', 'Terrain/Resources/Gold/Gold Stones/Gold Stone 6.png');
+
+        // ── UI Elements ─────────────────────────────────────
+        this.load.image('avatar_warrior_blue', 'UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png');
+        this.load.image('avatar_pawn_blue', 'UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png');
     }
 
     create ()

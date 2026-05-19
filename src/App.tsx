@@ -62,6 +62,110 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
     );
 }
 
+function SelectionPanel() {
+    const selectedBuildingId = useGameStore((s) => s.selectedBuildingId);
+    const selectedBuildingType = useGameStore((s) => s.selectedBuildingType);
+    const trainingQueue = useGameStore((s) => s.trainingQueue);
+    const trainingProgress = useGameStore((s) => s.trainingProgress);
+    const gold = useGameStore((s) => s.gold);
+    const currentPop = useGameStore((s) => s.currentPopulation);
+    const maxPop = useGameStore((s) => s.maxPopulation);
+
+    if (!selectedBuildingId) return null;
+
+    const handleTrainWarrior = () => {
+        if (gold >= 20 && (currentPop + trainingQueue.length) < maxPop) {
+            useGameStore.getState().addGold(-20);
+            EventBus.emit('train_warrior', selectedBuildingId);
+        }
+    };
+
+    const handleCancelTraining = (index: number) => {
+        EventBus.emit('cancel_training', { id: selectedBuildingId, index });
+    };
+
+    // Calculate circumference for SVG circle (r=22, c=2*pi*r)
+    const radius = 22;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (trainingProgress * circumference);
+
+    if (selectedBuildingType === 'barracks') {
+        const warriorCount = trainingQueue.filter(u => u === 'warrior').length;
+
+        return (
+            <div className={styles.selectionPanel}>
+                <div className={styles.selectionContent}>
+                    {/* Portrait & Progress */}
+                    <div className={styles.portraitContainer}>
+                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" className={styles.portraitImage} alt="Warrior" />
+                        {trainingQueue.length > 0 && (
+                            <svg className={styles.progressRing} width="52" height="52">
+                                <circle
+                                    stroke="rgba(0,0,0,0.3)"
+                                    strokeWidth="4"
+                                    fill="transparent"
+                                    r={radius}
+                                    cx="26"
+                                    cy="26"
+                                />
+                                <circle
+                                    stroke="#00aaff"
+                                    strokeWidth="4"
+                                    fill="transparent"
+                                    r={radius}
+                                    cx="26"
+                                    cy="26"
+                                    style={{
+                                        strokeDasharray: `${circumference} ${circumference}`,
+                                        strokeDashoffset: strokeDashoffset,
+                                        transform: 'rotate(-90deg)',
+                                        transformOrigin: '50% 50%',
+                                        transition: 'stroke-dashoffset 0.1s linear'
+                                    }}
+                                />
+                            </svg>
+                        )}
+                        {warriorCount > 1 && (
+                            <div className={styles.stackBadge}>x{warriorCount}</div>
+                        )}
+                    </div>
+
+                    {/* Actions & Info */}
+                    <div className={styles.selectionInfo}>
+                        <h3 className={styles.selectionTitle}>Barracks</h3>
+                        <div className={styles.selectionActions}>
+                            <button 
+                                className={`${styles.actionBtn} ${(gold < 20 || currentPop + trainingQueue.length >= maxPop) ? styles.actionBtnDisabled : ''}`}
+                                disabled={gold < 20 || currentPop + trainingQueue.length >= maxPop}
+                                onClick={handleTrainWarrior}
+                            >
+                                ⚔️ Train (💰20)
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Queue Strip */}
+                    {trainingQueue.length > 0 && (
+                        <div className={styles.queueStrip}>
+                            <div className={styles.queueLabel}>Queue</div>
+                            <div className={styles.queueList}>
+                                {trainingQueue.map((unit, idx) => (
+                                    <div key={idx} className={styles.queueItem} onClick={() => handleCancelTraining(idx)}>
+                                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt={unit} />
+                                        <div className={styles.queueItemCancel}>✕</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    return null;
+}
+
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [hasStarted, setHasStarted] = useState(false);
@@ -71,16 +175,6 @@ function App() {
     const currentPop = useGameStore((state) => state.currentPopulation);
     const maxPop = useGameStore((state) => state.maxPopulation);
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
-    const selectedBarracksId = useGameStore((state) => state.selectedBarracksId);
-
-    const handleTrainWarrior = () => {
-        if (gold >= 20 && currentPop < maxPop && selectedBarracksId) {
-            // Deduct gold here, or let the scene do it? The scene entity doesn't have direct store access easily without importing, but it can.
-            // It's cleaner to deduct gold here and then emit.
-            useGameStore.getState().addGold(-20);
-            EventBus.emit('train_warrior', selectedBarracksId);
-        }
-    };
 
     useEffect(() => {
         const handleFullscreenChange = () => {
@@ -201,18 +295,18 @@ function App() {
                         </button>
                     </div>
 
-                    {/* Action Buttons (e.g. Train Warrior) */}
-                    {selectedBarracksId && !isPlacing && (
-                        <div className={styles.actionMenu}>
-                            <button 
-                                className={`${styles.actionBtn} ${gold < 20 || currentPop >= maxPop ? styles.actionBtnDisabled : ''}`}
-                                disabled={gold < 20 || currentPop >= maxPop}
-                                onClick={handleTrainWarrior}
-                            >
-                                ⚔️ Train Warrior (💰 20)
-                            </button>
+                    {/* Quick Action Sidebar (Layout Only) */}
+                    <div className={styles.quickSidebar}>
+                        <div className={styles.quickSidebarItem}>
+                            <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Workers" />
                         </div>
-                    )}
+                        <div className={styles.quickSidebarItem}>
+                            <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt="Warriors" />
+                        </div>
+                    </div>
+
+                    {/* Selection Panel */}
+                    {!isPlacing && <SelectionPanel />}
 
                     {/* Placement Mode Indicator */}
                     {isPlacing && (

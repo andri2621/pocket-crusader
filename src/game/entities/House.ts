@@ -25,20 +25,6 @@ export class House extends BaseBuilding {
             Phaser.Geom.Rectangle.Contains
         );
 
-        // Apply WIP (Work In Progress) visuals
-        this.applyWipVisuals();
-    }
-
-    /**
-     * Apply "under construction" visuals:
-     * - Lower alpha for transparency
-     * - Grey tint to indicate incomplete state
-     */
-    private applyWipVisuals() {
-        if (!this.isCompleted) {
-            this.setAlpha(0.6);
-            this.mainSprite.setTint(0x888888);
-        }
     }
 
     public override completeConstruction() {
