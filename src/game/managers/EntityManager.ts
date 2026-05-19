@@ -113,6 +113,9 @@ export class EntityManager {
                 warrior.destroy();
                 this.units.splice(warriorIndex, 1);
 
+                // Refund half of the training cost (10 gold)
+                useGameStore.getState().addGold(10);
+
                 // Spawn a new Worker at the same position
                 const worker = new Worker({
                     scene: this.scene,
