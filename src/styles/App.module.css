@@ -59,29 +59,97 @@
     margin-bottom: 40px;
 }
 
-.playButton {
-    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
-    color: #fff;
+/* Lobby Styles */
+.lobbyActions {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 320px;
+}
+
+.lobbyBtnPrimary, .lobbyBtnSecondary {
+    min-height: 48px; /* Mobile touch target size */
     border: none;
-    padding: 16px 48px;
-    font-size: 20px;
+    border-radius: 24px;
+    font-size: 18px;
     font-weight: bold;
-    border-radius: 12px;
     cursor: pointer;
-    box-shadow: 0 10px 15px -3px rgba(217, 119, 6, 0.4);
+    transition: all 0.2s ease;
     text-transform: uppercase;
     letter-spacing: 1px;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.playButton:hover {
+.lobbyBtnPrimary {
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(217, 119, 6, 0.3);
+}
+.lobbyBtnPrimary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 20px 25px -5px rgba(217, 119, 6, 0.5);
+    box-shadow: 0 6px 20px rgba(217, 119, 6, 0.4);
+}
+.lobbyBtnPrimary:active {
+    transform: translateY(1px);
 }
 
-.playButton:active {
-    transform: translateY(1px);
-    box-shadow: 0 5px 10px -3px rgba(217, 119, 6, 0.4);
+.lobbyBtnSecondary {
+    background: #334155;
+    color: #fff;
+}
+.lobbyBtnSecondary:hover {
+    background: #475569;
+}
+
+.dividerText {
+    color: #64748b;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.joinContainer {
+    display: flex;
+    gap: 10px;
+}
+
+.lobbyInput {
+    flex: 1;
+    min-height: 48px;
+    border-radius: 24px;
+    border: 2px solid #334155;
+    background: rgba(15, 23, 42, 0.8);
+    color: #fff;
+    padding: 0 20px;
+    font-size: 18px;
+    text-align: center;
+    font-weight: bold;
+    text-transform: uppercase;
+    outline: none;
+    width: 140px;
+}
+.lobbyInput:focus {
+    border-color: #fbbf24;
+}
+
+.lobbyStatus {
+    margin-top: 15px;
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.waitingContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+.roomCodeDisplay {
+    font-size: 32px;
+    color: #fbbf24;
+    letter-spacing: 4px;
+    margin: 0;
+    font-family: monospace;
 }
 
 /* Overlay for Re-enter Fullscreen */
