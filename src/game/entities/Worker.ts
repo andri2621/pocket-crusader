@@ -38,7 +38,7 @@ export class Worker extends BaseUnit {
         // Randomize speed slightly (145 to 165)
         this.speed = 145 + Math.random() * 20;
 
-        this.mainSprite.play('pawn-idle');
+        this.mainSprite.play(`${this.texturePrefix}-idle`);
         
         // Pawn sprites are 192x192 with the character in the center 64x64.
         // To place their feet at the bottom of the container (Y=0), origin must be 128/192
@@ -79,59 +79,59 @@ export class Worker extends BaseUnit {
         switch (newState) {
             case 'IDLE':
                 if (this.isConstructionJob) {
-                    this.mainSprite.play('pawn-idle-hammer');
+                    this.mainSprite.play(`${this.texturePrefix}-idle-hammer`);
                 } else if (this.isCarrying && this.carriedResourceType === 'wood') {
-                    this.mainSprite.play('pawn-idle-wood');
+                    this.mainSprite.play(`${this.texturePrefix}-idle-wood`);
                 } else if (this.isCarrying && this.carriedResourceType === 'gold') {
-                    this.mainSprite.play('pawn-idle-gold');
+                    this.mainSprite.play(`${this.texturePrefix}-idle-gold`);
                 } else if (this.assignedHut) {
                     // Check hut type if we have multiple hut types later, for now axe/pickaxe
                     if (this.assignedHut.buildingType === 'gold_hut') {
-                        this.mainSprite.play('pawn-idle-pickaxe');
+                        this.mainSprite.play(`${this.texturePrefix}-idle-pickaxe`);
                     } else {
-                        this.mainSprite.play('pawn-idle-axe');
+                        this.mainSprite.play(`${this.texturePrefix}-idle-axe`);
                     }
                 } else {
-                    this.mainSprite.play('pawn-idle');
+                    this.mainSprite.play(`${this.texturePrefix}-idle`);
                 }
                 break;
             case 'MOVING':
                 if (this.isConstructionJob) {
-                    this.mainSprite.play('pawn-run-hammer');
+                    this.mainSprite.play(`${this.texturePrefix}-run-hammer`);
                 } else if (this.isCarrying && this.carriedResourceType === 'wood') {
-                    this.mainSprite.play('pawn-run-wood');
+                    this.mainSprite.play(`${this.texturePrefix}-run-wood`);
                 } else if (this.isCarrying && this.carriedResourceType === 'gold') {
-                    this.mainSprite.play('pawn-run-gold');
+                    this.mainSprite.play(`${this.texturePrefix}-run-gold`);
                 } else if (this.assignedHut) {
                     if (this.assignedHut.buildingType === 'gold_hut') {
-                        this.mainSprite.play('pawn-run-pickaxe');
+                        this.mainSprite.play(`${this.texturePrefix}-run-pickaxe`);
                     } else {
-                        this.mainSprite.play('pawn-run-axe');
+                        this.mainSprite.play(`${this.texturePrefix}-run-axe`);
                     }
                 } else {
-                    this.mainSprite.play('pawn-run');
+                    this.mainSprite.play(`${this.texturePrefix}-run`);
                 }
                 break;
             case 'MOVING_TO_TRAIN':
-                this.mainSprite.play('pawn-run');
+                this.mainSprite.play(`${this.texturePrefix}-run`);
                 this.disableInteractive(); // Draft lock
                 break;
             case 'CHOPPING':
-                this.mainSprite.play('pawn-chop');
+                this.mainSprite.play(`${this.texturePrefix}-chop`);
                 break;
             case 'MINING':
-                this.mainSprite.play('pawn-mine');
+                this.mainSprite.play(`${this.texturePrefix}-mine`);
                 break;
             case 'CARRYING':
             case 'DEPOSITING':
                 if (this.carriedResourceType === 'gold') {
-                    this.mainSprite.play('pawn-idle-gold');
+                    this.mainSprite.play(`${this.texturePrefix}-idle-gold`);
                 } else {
-                    this.mainSprite.play('pawn-idle-wood');
+                    this.mainSprite.play(`${this.texturePrefix}-idle-wood`);
                 }
                 break;
             case 'CONSTRUCTING':
-                this.mainSprite.play('pawn-build');
+                this.mainSprite.play(`${this.texturePrefix}-build`);
                 break;
         }
     }

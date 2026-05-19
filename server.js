@@ -61,6 +61,16 @@ app.prepare().then(() => {
       }
     });
 
+    socket.on('client_unit_move', (data) => {
+      console.log(`[Server Relay] Moving entity ${data.entityId} in room ${data.roomId} to Col:${data.targetCol}, Row:${data.targetRow}`);
+      socket.to(data.roomId).emit('server_unit_move', data);
+    });
+
+    socket.on('client_build_structure', ({ roomId, type, col, row, entityId, faction }) => {
+      console.log(`[Server Build Relay] Room ${roomId}: ${faction} is building ${type} at [Col:${col}, Row:${row}]`);
+      socket.to(roomId).emit('server_build_structure', { type, col, row, entityId, faction });
+    });
+
     socket.on('disconnect', () => {
       console.log(`[Socket] Player disconnected: ${socket.id}`);
       // Basic cleanup: find which room they were in and notify the other player

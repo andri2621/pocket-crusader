@@ -125,6 +125,19 @@ export abstract class BaseUnit extends BaseEntity {
         });
     }
 
+    public moveToGrid(targetCol: number, targetRow: number, onArrival?: () => void) {
+        const scene = this.scene as any;
+        if (scene && scene.gridManager) {
+            const startPos = { col: this.gridX, row: this.gridY };
+            const targetPos = { col: targetCol, row: targetRow };
+            scene.gridManager.findPath(startPos, targetPos, (path: GridPosition[]) => {
+                if (path) {
+                    this.moveAlongPath(path, onArrival);
+                }
+            });
+        }
+    }
+
     public override update(time: number, delta: number): void {
         // Track idle time for wandering
         if (this.workerState === 'IDLE') {

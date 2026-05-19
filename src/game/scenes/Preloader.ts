@@ -49,96 +49,40 @@ export class Preloader extends Scene
         });
 
         // ── Worker (Pawn) Spritesheets ──────────────────────
-        // Idle: 8 frames (192x192 each)
-        this.load.spritesheet('pawn-idle', 'Units/Blue Units/Pawn/Pawn_Idle.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
+        const factions = [
+            { color: 'Blue', prefix: 'pawn' },
+            { color: 'Red', prefix: 'pawn-red' }
+        ];
 
-        // Run: 6 frames (192x192 each)
-        this.load.spritesheet('pawn-run', 'Units/Blue Units/Pawn/Pawn_Run.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Chop (Interact Axe): 6 frames (192x192 each)
-        this.load.spritesheet('pawn-chop', 'Units/Blue Units/Pawn/Pawn_Interact Axe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Idle Axe: 8 frames (192x192)
-        this.load.spritesheet('pawn-idle-axe', 'Units/Blue Units/Pawn/Pawn_Idle Axe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Run Axe: 6 frames (192x192)
-        this.load.spritesheet('pawn-run-axe', 'Units/Blue Units/Pawn/Pawn_Run Axe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Idle while carrying wood: 8 frames (192x192)
-        this.load.spritesheet('pawn-idle-wood', 'Units/Blue Units/Pawn/Pawn_Idle Wood.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Run while carrying wood: 6 frames (192x192)
-        this.load.spritesheet('pawn-run-wood', 'Units/Blue Units/Pawn/Pawn_Run Wood.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // ── Worker Hammer (Construction) Spritesheets ─────
-        // Idle with hammer: 8 frames (192x192)
-        this.load.spritesheet('pawn-idle-hammer', 'Units/Blue Units/Pawn/Pawn_Idle Hammer.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Run with hammer: 6 frames (192x192)
-        this.load.spritesheet('pawn-run-hammer', 'Units/Blue Units/Pawn/Pawn_Run Hammer.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Build (Interact Hammer): 6 frames (192x192)
-        this.load.spritesheet('pawn-build', 'Units/Blue Units/Pawn/Pawn_Interact Hammer.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // ── Worker Pickaxe (Mining) Spritesheets ──────────
-        // Idle Pickaxe: 8 frames (192x192)
-        this.load.spritesheet('pawn-idle-pickaxe', 'Units/Blue Units/Pawn/Pawn_Idle Pickaxe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Run Pickaxe: 6 frames (192x192)
-        this.load.spritesheet('pawn-run-pickaxe', 'Units/Blue Units/Pawn/Pawn_Run Pickaxe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Mine (Interact Pickaxe): 6 frames (192x192)
-        this.load.spritesheet('pawn-mine', 'Units/Blue Units/Pawn/Pawn_Interact Pickaxe.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Idle while carrying gold: 8 frames (192x192)
-        this.load.spritesheet('pawn-idle-gold', 'Units/Blue Units/Pawn/Pawn_Idle Gold.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        // Run while carrying gold: 6 frames (192x192)
-        this.load.spritesheet('pawn-run-gold', 'Units/Blue Units/Pawn/Pawn_Run Gold.png', {
-            frameWidth: 192,
-            frameHeight: 192,
+        factions.forEach(({ color, prefix }) => {
+            // Idle: 8 frames (192x192 each)
+            this.load.spritesheet(`${prefix}-idle`, `Units/${color} Units/Pawn/Pawn_Idle.png`, { frameWidth: 192, frameHeight: 192 });
+            // Run: 6 frames
+            this.load.spritesheet(`${prefix}-run`, `Units/${color} Units/Pawn/Pawn_Run.png`, { frameWidth: 192, frameHeight: 192 });
+            // Chop (Interact Axe): 6 frames
+            this.load.spritesheet(`${prefix}-chop`, `Units/${color} Units/Pawn/Pawn_Interact Axe.png`, { frameWidth: 192, frameHeight: 192 });
+            // Idle Axe: 8 frames
+            this.load.spritesheet(`${prefix}-idle-axe`, `Units/${color} Units/Pawn/Pawn_Idle Axe.png`, { frameWidth: 192, frameHeight: 192 });
+            // Run Axe: 6 frames
+            this.load.spritesheet(`${prefix}-run-axe`, `Units/${color} Units/Pawn/Pawn_Run Axe.png`, { frameWidth: 192, frameHeight: 192 });
+            // Idle Wood: 8 frames
+            this.load.spritesheet(`${prefix}-idle-wood`, `Units/${color} Units/Pawn/Pawn_Idle Wood.png`, { frameWidth: 192, frameHeight: 192 });
+            // Run Wood: 6 frames
+            this.load.spritesheet(`${prefix}-run-wood`, `Units/${color} Units/Pawn/Pawn_Run Wood.png`, { frameWidth: 192, frameHeight: 192 });
+            
+            // ── Worker Hammer (Construction) ─────
+            this.load.spritesheet(`${prefix}-idle-hammer`, `Units/${color} Units/Pawn/Pawn_Idle Hammer.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-run-hammer`, `Units/${color} Units/Pawn/Pawn_Run Hammer.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-build`, `Units/${color} Units/Pawn/Pawn_Interact Hammer.png`, { frameWidth: 192, frameHeight: 192 });
+            
+            // ── Worker Pickaxe (Mining) ──────────
+            this.load.spritesheet(`${prefix}-idle-pickaxe`, `Units/${color} Units/Pawn/Pawn_Idle Pickaxe.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-run-pickaxe`, `Units/${color} Units/Pawn/Pawn_Run Pickaxe.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-mine`, `Units/${color} Units/Pawn/Pawn_Interact Pickaxe.png`, { frameWidth: 192, frameHeight: 192 });
+            
+            // ── Worker Gold ──────────
+            this.load.spritesheet(`${prefix}-idle-gold`, `Units/${color} Units/Pawn/Pawn_Idle Gold.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-run-gold`, `Units/${color} Units/Pawn/Pawn_Run Gold.png`, { frameWidth: 192, frameHeight: 192 });
         });
 
         // ── Buildings ───────────────────────────────────────
@@ -150,19 +94,15 @@ export class Preloader extends Scene
         this.load.image('barracks', 'Buildings/Blue Buildings/Barracks.png');
 
         // ── Warrior (Sword/Shield) Spritesheets ─────────────
-        this.load.spritesheet('warrior-idle', 'Units/Blue Units/Warrior/Warrior_Idle.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
+        const warriorFactions = [
+            { color: 'Blue', prefix: 'warrior' },
+            { color: 'Red', prefix: 'warrior-red' }
+        ];
 
-        this.load.spritesheet('warrior-run', 'Units/Blue Units/Warrior/Warrior_Run.png', {
-            frameWidth: 192,
-            frameHeight: 192,
-        });
-
-        this.load.spritesheet('warrior-attack', 'Units/Blue Units/Warrior/Warrior_Attack1.png', {
-            frameWidth: 192,
-            frameHeight: 192,
+        warriorFactions.forEach(({ color, prefix }) => {
+            this.load.spritesheet(`${prefix}-idle`, `Units/${color} Units/Warrior/Warrior_Idle.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-run`, `Units/${color} Units/Warrior/Warrior_Run.png`, { frameWidth: 192, frameHeight: 192 });
+            this.load.spritesheet(`${prefix}-attack`, `Units/${color} Units/Warrior/Warrior_Attack1.png`, { frameWidth: 192, frameHeight: 192 });
         });
 
         // ── Terrain Props ───────────────────────────────────

@@ -47,6 +47,11 @@ export abstract class BaseBuilding extends BaseEntity {
             this.mainSprite.setVisible(false);
             this.createConstructionGrid();
         }
+
+        // Apply red tint to buildings of faction 'red'
+        if (this.faction === 'red') {
+            this.mainSprite.setTint(0xff8888);
+        }
     }
 
     public get availableBuilderSpots(): number {
@@ -166,7 +171,11 @@ export abstract class BaseBuilding extends BaseEntity {
         this.constructionTiles = [];
 
         this.mainSprite.setVisible(true);
-        this.mainSprite.clearTint();
+        if (this.faction === 'red') {
+            this.mainSprite.setTint(0xff8888);
+        } else {
+            this.mainSprite.clearTint();
+        }
         this.setAlpha(1.0);
 
         // Hide progress bar

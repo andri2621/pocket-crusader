@@ -7,6 +7,9 @@ export interface EntityConfig {
     col?: number;
     row?: number;
     texture: string;
+    id?: string;
+    faction?: 'blue' | 'red';
+    texturePrefix?: string;
 }
 
 export interface UnitConfig extends EntityConfig {

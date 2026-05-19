@@ -14,7 +14,7 @@ export class King extends BaseUnit {
         // Scale up the king and add golden tint
         this.mainSprite.setScale(1.3);
         this.mainSprite.setTint(0xfff000); // Memberikan efek kilau emas tipis
-        this.mainSprite.play('pawn-idle');
+        this.mainSprite.play(`${this.texturePrefix}-idle`);
         this.mainSprite.setOrigin(0.5, 128 / 192);
 
         // Setup hitbox for worker in local container space.
@@ -63,10 +63,10 @@ export class King extends BaseUnit {
     protected override onStateChange(newState: WorkerState): void {
         switch (newState) {
             case 'IDLE':
-                this.mainSprite.play('pawn-idle');
+                this.mainSprite.play(`${this.texturePrefix}-idle`);
                 break;
             case 'MOVING':
-                this.mainSprite.play('pawn-run');
+                this.mainSprite.play(`${this.texturePrefix}-run`);
                 break;
         }
     }

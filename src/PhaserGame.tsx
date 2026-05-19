@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef } from 'react';
 import StartGame from './game/main';
 import { EventBus } from './game/EventBus';
+import { socket } from './network/socketClient';
 
 export interface IRefPhaserGame
 {
@@ -23,6 +24,10 @@ export const PhaserGame = forwardRef<IRefPhaserGame, IProps>(function PhaserGame
         {
 
             game.current = StartGame("game-container");
+
+            if (game.current) {
+                game.current.registry.set('socket', socket);
+            }
 
             if (typeof ref === 'function')
             {

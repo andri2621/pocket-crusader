@@ -1,11 +1,9 @@
 import { useRef, useState, useEffect } from "react";
-import { io, Socket } from "socket.io-client";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
 import { useGameStore } from "./store/useGameStore";
 import styles from "./styles/App.module.css";
 import { EventBus } from "./game/EventBus";
-
-let socket: Socket;
+import { socket } from "./network/socketClient";
 
 function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
     const isOpen = useGameStore((s) => s.isBuildMenuOpen);
@@ -221,8 +219,8 @@ function App() {
 
     useEffect(() => {
         // Initialize Socket.IO only once on the client
-        if (!socket) {
-            socket = io();
+        if (!socket.connected) {
+            socket.connect();
             
             socket.on('connect', () => {
                 console.log('[Socket] Connected:', socket.id);
@@ -353,7 +351,7 @@ function App() {
                                             className={styles.lobbyInput}
                                         />
                                         <button className={styles.lobbyBtnSecondary} onClick={handleJoinRoom}>
-                                            Join Room
+                                            Join
                                         </button>
                                     </div>
                                     {lobbyStatus && <p className={styles.lobbyStatus}>{lobbyStatus}</p>}

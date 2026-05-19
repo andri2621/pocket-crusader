@@ -11,7 +11,7 @@ export class Warrior extends BaseUnit {
         this.currentHealth = 200;
         this.speed = 130; // Slower but tougher than Workers
 
-        this.mainSprite.play('warrior-idle');
+        this.mainSprite.play(`${this.texturePrefix}-idle`);
         
         // Warrior sprites are 192x192 with the character in the center 64x64.
         this.mainSprite.setOrigin(0.5, 128 / 192);
@@ -33,13 +33,13 @@ export class Warrior extends BaseUnit {
     protected override onStateChange(newState: WorkerState): void {
         switch (newState) {
             case 'IDLE':
-                this.mainSprite.play('warrior-idle');
+                this.mainSprite.play(`${this.texturePrefix}-idle`);
                 break;
             case 'MOVING':
-                this.mainSprite.play('warrior-run');
+                this.mainSprite.play(`${this.texturePrefix}-run`);
                 break;
             case 'ATTACK':
-                this.mainSprite.play('warrior-attack');
+                this.mainSprite.play(`${this.texturePrefix}-attack`);
                 break;
         }
     }

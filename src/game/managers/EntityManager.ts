@@ -117,15 +117,24 @@ export class EntityManager {
                 useGameStore.getState().addGold(10);
 
                 // Spawn a new Worker at the same position
+                const faction = warrior.faction || 'blue';
+                const texturePrefix = faction === 'blue' ? 'pawn' : 'pawn-red';
+                const texture = `${texturePrefix}-idle`;
                 const worker = new Worker({
                     scene: this.scene,
                     col: col,
                     row: row,
-                    texture: 'pawn-idle'
+                    texture: texture,
+                    faction: faction,
+                    texturePrefix: texturePrefix
                 });
                 this.addUnit(worker); // Also calls recalculatePopulation
             }
         });
+    }
+
+    public findUnitById(id: string): BaseUnit | undefined {
+        return this.units.find(u => u.id === id);
     }
 
     public addUnit(unit: BaseUnit) {
@@ -219,11 +228,16 @@ export class EntityManager {
                 const spawnTile = this.gridManager.getRandomWalkableTileInRange(stronghold.gridX, stronghold.gridY, 2) 
                     || { col: stronghold.gridX, row: stronghold.gridY + 2 };
 
+                const faction = stronghold.faction || 'blue';
+                const texturePrefix = faction === 'blue' ? 'pawn' : 'pawn-red';
+                const texture = `${texturePrefix}-idle`;
                 const worker = new Worker({ 
                     scene: this.scene, 
                     col: spawnTile.col, 
                     row: spawnTile.row, 
-                    texture: 'pawn-idle' 
+                    texture: texture,
+                    faction: faction,
+                    texturePrefix: texturePrefix
                 });
                 this.addUnit(worker);
             }

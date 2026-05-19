@@ -203,33 +203,58 @@ export class InteractionManager {
         const row = this.ghostGridRow;
 
         const store = useGameStore.getState();
+        const faction = store.faction || 'blue';
+        const roomId = store.roomId;
+
         if (store.wood < def.cost) return false;
         if (def.goldCost && store.gold < def.goldCost) return false;
 
         store.addWood(-def.cost);
         if (def.goldCost) store.addGold(-def.goldCost);
 
+        const newBuildingId = `building_${faction}_${Date.now()}`;
+
+        // Multiplayer Sync Emission
+        const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
+        if (activeSocket && roomId) {
+            console.log(`[InteractionManager Sync] Emitting build event for ${this.buildType} at [Col:${col}, Row:${row}] with ID ${newBuildingId}`);
+            activeSocket.emit('client_build_structure', {
+                roomId: String(roomId).trim(),
+                type: this.buildType,
+                col,
+                row,
+                entityId: newBuildingId,
+                faction
+            });
+        }
+
         if (this.buildType === 'house') {
-            const house = new House({ scene: this.scene, col, row, texture: 'house1' });
+            const house = new House({ scene: this.scene, col, row, texture: 'house1', faction, id: newBuildingId });
             this.entityManager.addBuilding(house);
         } else if (this.buildType === 'woodcutter_hut') {
             const hut = new BuildingEntity({
                 scene: this.scene, col, row,
                 texture: 'hut',
-                buildingType: 'woodcutter_hut'
+                buildingType: 'woodcutter_hut',
+                faction,
+                id: newBuildingId
             });
             this.entityManager.addBuilding(hut);
         } else if (this.buildType === 'gold_hut') {
             const hut = new GoldHut({
                 scene: this.scene, col, row,
                 texture: 'gold_hut',
-                buildingType: 'gold_hut'
+                buildingType: 'gold_hut',
+                faction,
+                id: newBuildingId
             });
             this.entityManager.addBuilding(hut);
         } else if (this.buildType === 'barracks') {
             const barracks = new Barracks({
                 scene: this.scene, col, row,
-                texture: 'barracks'
+                texture: 'barracks',
+                faction,
+                id: newBuildingId
             });
             this.entityManager.addBuilding(barracks);
         }
@@ -311,7 +336,13 @@ export class InteractionManager {
 
         // Handle Building Selection
         const store = useGameStore.getState();
+        const localFaction = store.faction || 'blue';
+
         if (hitBuilding) {
+            // Faction Select Lock: Only allow selecting our own buildings
+            if (hitBuilding.faction !== localFaction) {
+                return;
+            }
             store.setSelectedBuilding(hitBuilding.id, hitBuilding.buildingType);
             
             // If it's a barracks, also sync its queue immediately
@@ -331,6 +362,10 @@ export class InteractionManager {
 
         // 2. Unit Selection Priority
         if (hitUnit) {
+            // Faction Select Lock: Only allow selecting our own units
+            if (hitUnit.faction !== localFaction) {
+                return;
+            }
             this.selectUnit(hitUnit);
             return;
         }
@@ -458,12 +493,34 @@ export class InteractionManager {
                     (this.selectedUnit as Worker).cancelHutAutomation();
                 }
 
-                const startPos = { col: this.selectedUnit.gridX, row: this.selectedUnit.gridY };
-                this.gridManager.findPath(startPos, targetPos, (path) => {
-                    if (path && this.selectedUnit) {
-                        this.selectedUnit.moveAlongPath(path);
-                    }
-                });
+                // PULL ROOMID AND FACTION FROM ZUSTAND
+                const { roomId, faction } = useGameStore.getState();
+
+                console.log("[Client Click] Ground clicked. Selected Unit:", this.selectedUnit?.id);
+                console.log("[Client Click] Room ID status:", roomId, "Faction:", faction);
+
+                if (!roomId || !this.selectedUnit) {
+                    console.warn("[Client Click] Aborted. Missing Room ID or no Unit selected.");
+                    return;
+                }
+
+                // Execute local movement pathfinding
+                this.selectedUnit.moveToGrid(targetPos.col, targetPos.row);
+
+                // Dynamically ensure we use the scene's inherited socket
+                const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
+
+                if (activeSocket) {
+                    console.log(`[InteractionManager Sync] Actively emitting via aligned Socket ID: ${activeSocket.id}`);
+                    activeSocket.emit('client_unit_move', {
+                        roomId: String(roomId).trim(),
+                        entityId: this.selectedUnit.id,
+                        targetCol: targetPos.col,
+                        targetRow: targetPos.row
+                    });
+                } else {
+                    console.error("[InteractionManager Fatal] No valid socket instance found on scene or registry!");
+                }
             } else {
                 this.deselectUnit();
             }

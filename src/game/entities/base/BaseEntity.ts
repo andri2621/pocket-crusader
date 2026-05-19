@@ -3,6 +3,9 @@ import { EntityConfig } from '../../../types/entity.types';
 
 export abstract class BaseEntity extends Phaser.GameObjects.Container {
     public readonly id: string;
+    public faction: 'blue' | 'red';
+    public texturePrefix: string;
+    
     public gridX: number = 0;
     public gridY: number = 0;
     public isSelected: boolean = false;
@@ -16,7 +19,9 @@ export abstract class BaseEntity extends Phaser.GameObjects.Container {
     constructor(config: EntityConfig) {
         super(config.scene, config.x ?? 0, config.y ?? 0);
         
-        this.id = Phaser.Math.RND.uuid();
+        this.id = config.id || Phaser.Math.RND.uuid();
+        this.faction = config.faction || 'blue';
+        this.texturePrefix = config.texturePrefix || 'pawn';
 
         // Add to scene
         this.scene.add.existing(this);
@@ -62,7 +67,12 @@ export abstract class BaseEntity extends Phaser.GameObjects.Container {
         if (selected) {
             this.mainSprite.setTint(0x00ff00);
         } else {
-            this.mainSprite.clearTint();
+            // Apply red tint to buildings of faction 'red' when deselected
+            if (this.faction === 'red' && !(this.constructor.name === 'Worker' || this.constructor.name === 'Warrior' || this.constructor.name === 'King')) {
+                this.mainSprite.setTint(0xff8888);
+            } else {
+                this.mainSprite.clearTint();
+            }
         }
     }
 
