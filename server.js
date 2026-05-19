@@ -71,6 +71,46 @@ app.prepare().then(() => {
       socket.to(roomId).emit('server_build_structure', { type, col, row, entityId, faction });
     });
 
+    socket.on('client_spawn_unit', ({ roomId, type, col, row, entityId, faction }) => {
+      console.log(`[Server Spawn Relay] Room ${roomId}: spawning ${type} for ${faction} at [Col:${col}, Row:${row}] with ID ${entityId}`);
+      socket.to(roomId).emit('server_spawn_unit', { type, col, row, entityId, faction });
+    });
+
+    socket.on('client_unit_transformed', (data) => {
+      console.log(`[Server Transform Relay] Room ${data.roomId}: transforming ${data.oldEntityId} -> ${data.newEntityId}`);
+      socket.to(data.roomId).emit('server_unit_transformed', data);
+    });
+
+    socket.on('client_start_gathering', ({ roomId, entityId, resourceX, resourceY, resourceType }) => {
+      console.log(`[Server Gathering Relay] Room ${roomId}: entity ${entityId} start gathering at [${resourceX}, ${resourceY}]`);
+      socket.to(roomId).emit('server_start_gathering', { entityId, resourceX, resourceY, resourceType });
+    });
+
+    socket.on('client_resource_depleted', ({ roomId, resourceX, resourceY, amount }) => {
+      console.log(`[Server Depletion Relay] Room ${roomId}: resource depletion at [${resourceX}, ${resourceY}] by amount ${amount}`);
+      socket.to(roomId).emit('server_resource_depleted', { resourceX, resourceY, amount });
+    });
+
+    socket.on('client_resource_harvested', ({ roomId, resourceId, amountHarvested }) => {
+      console.log(`[Server Harvest Relay] Room ${roomId}: resource ${resourceId} harvested by amount ${amountHarvested}`);
+      socket.to(roomId).emit('server_resource_harvested', { resourceId, amountHarvested });
+    });
+
+    socket.on('client_start_training', ({ roomId, barracksId, unitType }) => {
+      console.log(`[Server Train Relay] Room ${roomId}: barracks ${barracksId} training ${unitType}`);
+      socket.to(roomId).emit('server_start_training', { barracksId, unitType });
+    });
+
+    socket.on('client_construction_progress', ({ roomId, buildingId, progress }) => {
+      console.log(`[Server Progress Relay] Room ${roomId}: building ${buildingId} progress is ${progress}%`);
+      socket.to(roomId).emit('server_construction_progress', { buildingId, progress });
+    });
+
+    socket.on('client_start_constructing', ({ roomId, entityId, buildingId }) => {
+      console.log(`[Server Build Start Relay] Room ${roomId}: entity ${entityId} start constructing building ${buildingId}`);
+      socket.to(roomId).emit('server_start_constructing', { entityId, buildingId });
+    });
+
     socket.on('disconnect', () => {
       console.log(`[Socket] Player disconnected: ${socket.id}`);
       // Basic cleanup: find which room they were in and notify the other player

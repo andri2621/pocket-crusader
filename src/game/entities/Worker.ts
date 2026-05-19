@@ -32,6 +32,62 @@ export class Worker extends BaseUnit {
         return this.workerState === 'IDLE' && !this.isConstructionJob && !this.isCarrying && !this.assignedHut;
     }
 
+    public getTargetResource(): BaseResource | null {
+        return this.targetResource;
+    }
+
+    public getTargetBuilding(): BaseBuilding | null {
+        return this.targetBuilding;
+    }
+
+    public setTargetResource(res: BaseResource | null): void {
+        this.targetResource = res;
+    }
+
+    public setTargetBuilding(b: BaseBuilding | null): void {
+        this.targetBuilding = b;
+    }
+
+    public cancelGathering(): void {
+        if (this.gatherTimer) {
+            this.gatherTimer.destroy();
+            this.gatherTimer = null;
+        }
+        this.targetResource = null;
+    }
+
+    public override moveToGrid(targetCol: number, targetRow: number, onArrival?: () => void): void {
+        this.cancelBuilding();
+        this.cancelGathering();
+        super.moveToGrid(targetCol, targetRow, onArrival);
+    }
+
+    public override update(time: number, delta: number): void {
+        super.update(time, delta);
+
+        if (this.isMoving) {
+            return;
+        }
+
+        // Force active animations to play to prevent standing still bugs
+        if (this.workerState === 'CONSTRUCTING') {
+            const animKey = `${this.texturePrefix}-build`;
+            if (this.mainSprite.anims.currentAnim?.key !== animKey) {
+                this.mainSprite.play(animKey, true);
+            }
+        } else if (this.workerState === 'CHOPPING') {
+            const animKey = `${this.texturePrefix}-chop`;
+            if (this.mainSprite.anims.currentAnim?.key !== animKey) {
+                this.mainSprite.play(animKey, true);
+            }
+        } else if (this.workerState === 'MINING') {
+            const animKey = `${this.texturePrefix}-mine`;
+            if (this.mainSprite.anims.currentAnim?.key !== animKey) {
+                this.mainSprite.play(animKey, true);
+            }
+        }
+    }
+
     constructor(config: UnitConfig) {
         super(config);
         
@@ -174,11 +230,28 @@ export class Worker extends BaseUnit {
             loop: true,
             callback: () => {
                 if (!this.targetResource) return;
+
+                const store = useGameStore.getState();
+                // Faction Guard: Only apply local resource node damage and credits if this is OUR worker!
+                if (this.faction !== store.faction) {
+                    return;
+                }
                 
-                this.targetResource.takeDamage(1);
+                const damage = 1;
+                this.targetResource.takeDamage(damage);
                 this.carriedAmount += this.targetResource.yieldPerHit;
                 this.carriedResourceType = this.targetResource.resourceType as 'wood' | 'gold';
                 
+                // Network Sync: Emit resource harvested if this is our worker
+                const activeSocket = this.scene.game.registry.get('socket');
+                if (activeSocket && store.roomId) {
+                    activeSocket.emit('client_resource_harvested', {
+                        roomId: String(store.roomId).trim(),
+                        resourceId: this.targetResource.id,
+                        amountHarvested: damage
+                    });
+                }
+
                 // Stop gathering if resource depleted OR inventory full (e.g., 10 capacity)
                 if (this.targetResource.currentHealth <= 0 || this.carriedAmount >= 10) {
                     this.collectResource();
@@ -211,10 +284,11 @@ export class Worker extends BaseUnit {
 
     public depositResource(): void {
         if (this.carriedAmount > 0) {
+            const faction = this.faction || 'blue';
             if (this.carriedResourceType === 'wood') {
-                useGameStore.getState().addWood(this.carriedAmount);
+                useGameStore.getState().addWood(this.carriedAmount, faction);
             } else if (this.carriedResourceType === 'gold') {
-                useGameStore.getState().addGold(this.carriedAmount);
+                useGameStore.getState().addGold(this.carriedAmount, faction);
             }
             this.clearInventory();
         }
@@ -244,6 +318,18 @@ export class Worker extends BaseUnit {
         
         this.setWorkerState('CONSTRUCTING');
 
+        // Multiplayer Sync
+        const store = useGameStore.getState();
+        const activeSocket = this.scene.game.registry.get('socket');
+        if (activeSocket && store.roomId && this.faction === store.faction) {
+            console.log(`[Build Sync] Emitting client_start_constructing for ${this.id} to building ${building.id}`);
+            activeSocket.emit('client_start_constructing', {
+                roomId: String(store.roomId).trim(),
+                entityId: this.id,
+                buildingId: building.id
+            });
+        }
+
         // Face the building
         if (building.gridX < this.gridX) {
             this.mainSprite.setFlipX(true);
@@ -261,10 +347,22 @@ export class Worker extends BaseUnit {
                     return;
                 }
 
-                this.targetBuilding.addProgress(10);
+                const currentBuilding = this.targetBuilding;
+                currentBuilding.addProgress(10);
+
+                // Multiplayer Sync
+                const store = useGameStore.getState();
+                const activeSocket = this.scene.game.registry.get('socket');
+                if (activeSocket && store.roomId && this.faction === store.faction && currentBuilding) {
+                    activeSocket.emit('client_construction_progress', {
+                        roomId: String(store.roomId).trim(),
+                        buildingId: currentBuilding.id,
+                        progress: currentBuilding.progress
+                    });
+                }
 
                 // Check if building completed after this tick
-                if (this.targetBuilding?.isCompleted) {
+                if (currentBuilding.isCompleted || this.targetBuilding === null) {
                     this.cancelBuilding();
                     this.setWorkerState('IDLE');
                 }
@@ -326,8 +424,8 @@ export class Worker extends BaseUnit {
     }
 
     public hideForTraining(): void {
-        this.setActive(false);
-        this.setVisible(false);
+        this.setActive(true);
+        this.setVisible(true);
         this.disableInteractive();
     }
 

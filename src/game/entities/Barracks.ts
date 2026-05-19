@@ -10,6 +10,9 @@ export class Barracks extends BaseBuilding {
     // Queue System
     public trainingRecruits: { workerId: string, unitType: string, status: 'walking' | 'training' }[] = [];
     public currentTrainingProgress: number = 0;
+    public currentTrainingPawnId: string | null = null;
+    
+    private entityManager: any;
     
     // UI Progress Bar for training
     private trainingProgressBarBg: Phaser.GameObjects.Graphics;
@@ -27,6 +30,8 @@ export class Barracks extends BaseBuilding {
             footprintWidth: 2,
             footprintHeight: 2
         });
+
+        this.entityManager = (config.scene as any).entityManager;
 
         // The barracks asset is 2x2.
         this.mainSprite.setOrigin(0.5, 0.9);
@@ -87,8 +92,30 @@ export class Barracks extends BaseBuilding {
         const recruit = this.trainingRecruits.find(r => r.workerId === workerId);
         if (recruit) {
             recruit.status = 'training';
+            this.currentTrainingPawnId = workerId;
             this.processQueue();
+
+            // Multiplayer Sync: Emit client_start_training when training actually STARTS!
+            const store = useGameStore.getState();
+            const activeSocket = this.scene.game.registry.get('socket');
+            if (activeSocket && store.roomId && this.faction === store.faction) {
+                console.log(`[Train Sync] Emitting client_start_training for barracks ${this.id}, type ${recruit.unitType}`);
+                activeSocket.emit('client_start_training', {
+                    roomId: String(store.roomId).trim(),
+                    barracksId: this.id,
+                    unitType: recruit.unitType
+                });
+            }
         }
+    }
+
+    public addRemoteWorkerToQueue(unitType: string) {
+        if (!this.isCompleted) return;
+        const workerId = `remote_recruit_${Date.now()}`;
+        this.trainingRecruits.push({ workerId, unitType, status: 'training' });
+        this.syncQueueToStore();
+        this.updateQueueLabel();
+        this.processQueue();
     }
 
     public cancelQueueItem(index: number) {
@@ -135,6 +162,16 @@ export class Barracks extends BaseBuilding {
     }
 
     private onTrainingComplete() {
+        const store = useGameStore.getState();
+        const isMultiplayer = !!store.roomId;
+        if (isMultiplayer && this.faction !== store.faction) {
+            // Remote Barracks countdown complete: hold at 100% and wait for server_unit_transformed
+            this.currentTrainingProgress = 1;
+            this.updateTrainingBar(1);
+            this.syncQueueToStore();
+            return;
+        }
+
         this.isTraining = false;
         this.trainingTimer = null;
         this.currentTrainingProgress = 0;
@@ -143,10 +180,51 @@ export class Barracks extends BaseBuilding {
         
         const trainedRecruit = this.trainingRecruits.shift(); // Remove completed item
         if (trainedRecruit) {
-            // Tell EntityManager to completely destroy the worker, and spawn warrior
-            this.scene.events.emit('worker_graduated', trainedRecruit.workerId);
-            if (trainedRecruit.unitType === 'warrior') {
-                this.scene.events.emit('warrior_trained', this);
+            try {
+                const consumedPawnId = this.currentTrainingPawnId || trainedRecruit.workerId;
+                const finalWarriorId = `warrior_${this.faction}_${Date.now()}`;
+                
+                console.log(`[Authoritative Completion] Queue hit 100%. Swapping ${consumedPawnId} to ${finalWarriorId}`);
+                
+                // 1. Locate and destroy the pawn ONLY NOW
+                const localPawn = this.entityManager.getUnitById(consumedPawnId);
+                if (localPawn) {
+                    // Safely unselect from interaction handlers
+                    this.scene.events.emit('force_deselect_unit', consumedPawnId);
+                    
+                    localPawn.destroy(); // Safely kill the sprite
+                    this.entityManager.removeUnitFromList(consumedPawnId); // Clean from array bounds
+                } else {
+                    console.warn(`[Authoritative Warning] Could not find pawn ${consumedPawnId} at completion frame!`);
+                }
+
+                // 2. Spawn the new local Warrior sprite instantly near the entrance
+                const scene = this.scene as any;
+                const entranceCol = this.gridX;
+                const entranceRow = this.gridY + 1;
+                const spawnPos = scene.gridManager.findAdjacentWalkable(entranceCol, entranceRow + 1, { col: entranceCol, row: entranceRow + 1 })
+                              || scene.gridManager.getRandomAdjacentWalkable(entranceCol, entranceRow + 1)
+                              || { col: entranceCol, row: entranceRow + 2 };
+                const spawnCol = spawnPos.col;
+                const spawnRow = spawnPos.row;
+
+                this.entityManager.spawnWarrior(spawnCol, spawnRow, this.faction, finalWarriorId);
+
+                // 3. Inform the network to execute the exact same twin swap
+                const activeSocket = this.scene.game.registry.get('socket');
+                if (isMultiplayer && activeSocket) {
+                    activeSocket.emit('client_unit_transformed', {
+                        roomId: store.roomId,
+                        oldEntityId: consumedPawnId,
+                        newEntityId: finalWarriorId,
+                        col: spawnCol,
+                        row: spawnRow,
+                        faction: this.faction,
+                        barracksId: this.id
+                    });
+                }
+            } catch (error) {
+                console.error("[Authoritative Crash] Critical swap failure:", error);
             }
         }
 
@@ -162,11 +240,49 @@ export class Barracks extends BaseBuilding {
         }
     }
 
+    public wipeRemoteRecruitPlaceholder() {
+        const index = this.trainingRecruits.findIndex(r => r.workerId.startsWith('remote_recruit_'));
+        if (index !== -1) {
+            this.trainingRecruits.splice(index, 1);
+        } else if (this.trainingRecruits.length > 0) {
+            this.trainingRecruits.shift();
+        }
+        
+        // Reset training progress/timer if the queue is now empty
+        if (this.trainingRecruits.length === 0) {
+            this.isTraining = false;
+            if (this.trainingTimer) {
+                this.trainingTimer.destroy();
+                this.trainingTimer = null;
+            }
+            this.currentTrainingProgress = 0;
+            this.trainingProgressBarBg.setVisible(false);
+            this.trainingProgressBarFill.setVisible(false);
+        } else {
+            // Restart progress on the next item if we just shifted the active one
+            this.isTraining = false;
+            if (this.trainingTimer) {
+                this.trainingTimer.destroy();
+                this.trainingTimer = null;
+            }
+            this.currentTrainingProgress = 0;
+            this.trainingProgressBarBg.setVisible(false);
+            this.trainingProgressBarFill.setVisible(false);
+            this.scene.time.delayedCall(0, () => {
+                this.processQueue();
+            });
+        }
+        
+        this.syncQueueToStore();
+        this.updateQueueLabel();
+    }
+
     private processQueue() {
         if (this.trainingRecruits.length > 0 && !this.isTraining && this.isCompleted) {
             const firstRecruit = this.trainingRecruits[0];
             if (firstRecruit.status === 'training') {
                 this.isTraining = true;
+                this.currentTrainingPawnId = firstRecruit.workerId;
                 this.currentTrainingProgress = 0;
                 this.trainingProgressBarBg.setVisible(true);
                 this.trainingProgressBarFill.setVisible(true);

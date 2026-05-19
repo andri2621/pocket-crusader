@@ -1,6 +1,7 @@
 import { BaseEntity } from './BaseEntity';
 import { UnitConfig } from '../../../types/entity.types';
 import { WorkerState, GridPosition } from '../../../types/game';
+import { useGameStore } from '../../../store/useGameStore';
 
 export abstract class BaseUnit extends BaseEntity {
     public workerState: WorkerState = 'IDLE';
@@ -119,7 +120,22 @@ export abstract class BaseUnit extends BaseEntity {
                 if (onArrival) {
                     onArrival();
                 } else {
-                    this.setWorkerState('IDLE');
+                    // Check if this unit is a Worker dynamically to avoid circular import issues
+                    const worker = this as any;
+                    if (typeof worker.getTargetResource === 'function' && worker.getTargetResource()) {
+                        const resource = worker.getTargetResource();
+                        worker.startGathering(resource);
+                    } else if (typeof worker.getTargetBuilding === 'function' && worker.getTargetBuilding()) {
+                        const building = worker.getTargetBuilding();
+                        if (!building.isCompleted) {
+                            worker.startBuilding(building);
+                        } else {
+                            worker.cancelBuilding();
+                            worker.setWorkerState('IDLE');
+                        }
+                    } else {
+                        this.setWorkerState('IDLE');
+                    }
                 }
             }
         });
@@ -139,6 +155,13 @@ export abstract class BaseUnit extends BaseEntity {
     }
 
     public override update(time: number, delta: number): void {
+        const store = useGameStore.getState();
+        const isMultiplayer = !!store.roomId;
+        if (isMultiplayer && this.faction !== store.faction) {
+            this.idleTimer = 0;
+            return;
+        }
+
         // Track idle time for wandering
         if (this.workerState === 'IDLE') {
             this.idleTimer += delta;

@@ -13,6 +13,7 @@ import { Barracks } from '../entities/Barracks';
 import { House } from '../entities/House';
 import { GoldHut } from '../entities/GoldHut';
 import { BuildingEntity } from '../entities/BuildingEntity';
+import { useGameStore } from '../../store/useGameStore';
 
 const MAP_WIDTH = GRID_COLS * TILE_SIZE;
 const MAP_HEIGHT = GRID_ROWS * TILE_SIZE;
@@ -55,28 +56,45 @@ export class GameScene extends Scene {
         this.setupCameraInput();
 
         // 5. Setup Events
-        this.events.on('warrior_trained', (barracks: Barracks) => {
-            // Find a walkable tile near the barracks entrance (bottom edge)
-            const entranceCol = barracks.gridX; 
-            const entranceRow = barracks.gridY + 1; // Since it's 2x2, bottom edge is gridY + 1, below is gridY + 2
-            
-            // Standard 8-direction adjacency for unit spawning
-            const spawnPos = this.gridManager.findAdjacentWalkable(entranceCol, entranceRow + 1, { col: entranceCol, row: entranceRow + 1 })
-                          || this.gridManager.getRandomAdjacentWalkable(entranceCol, entranceRow + 1);
+        this.events.on('warrior_trained', (barracks: Barracks, oldWorkerId: string) => {
+            const store = useGameStore.getState();
+            const faction = barracks.faction || 'blue';
 
-            if (spawnPos) {
-                const faction = barracks.faction || 'blue';
-                const texturePrefix = faction === 'blue' ? 'warrior' : 'warrior-red';
-                const texture = `${texturePrefix}-idle`;
-                const warrior = new Warrior({ 
-                    scene: this, 
-                    col: spawnPos.col, 
-                    row: spawnPos.row, 
-                    texture: texture,
-                    faction: faction,
-                    texturePrefix: texturePrefix
-                });
-                this.entityManager.addUnit(warrior);
+            // Only spawn/emit if this barracks belongs to our faction!
+            if (faction === store.faction) {
+                // Strict matching check: Ensure target pawn matches barracks faction
+                const targetPawn = this.entityManager.findUnitById(oldWorkerId);
+                if (!targetPawn || targetPawn.faction !== faction) {
+                    console.warn(`[Barracks Strict Spawn] Aborted: target pawn ${oldWorkerId} faction does not match barracks faction ${faction}`);
+                    return;
+                }
+
+                // Find a walkable tile near the barracks entrance (bottom edge)
+                const entranceCol = barracks.gridX; 
+                const entranceRow = barracks.gridY + 1; // Since it's 2x2, bottom edge is gridY + 1, below is gridY + 2
+                
+                // Standard 8-direction adjacency for unit spawning
+                const spawnPos = this.gridManager.findAdjacentWalkable(entranceCol, entranceRow + 1, { col: entranceCol, row: entranceRow + 1 })
+                              || this.gridManager.getRandomAdjacentWalkable(entranceCol, entranceRow + 1);
+
+                if (spawnPos) {
+                    const newWarriorId = `warrior_${faction}_${Date.now()}`;
+                    this.entityManager.spawnWarrior(spawnPos.col, spawnPos.row, faction, newWarriorId);
+
+                    // Emit unit transformation sync
+                    if (this.socket && store.roomId) {
+                        console.log(`[Transform Sync] Emitting transformation of pawn ${oldWorkerId} -> warrior ${newWarriorId}`);
+                        this.socket.emit('client_unit_transformed', {
+                            roomId: String(store.roomId).trim(),
+                            oldEntityId: oldWorkerId,
+                            newEntityId: newWarriorId,
+                            type: 'warrior',
+                            col: spawnPos.col,
+                            row: spawnPos.row,
+                            faction
+                        });
+                    }
+                }
             }
         });
 
@@ -100,6 +118,132 @@ export class GameScene extends Scene {
                 } else {
                     console.warn(`[Client Warning] Action ignored. Could not find remote unit with ID: ${data.entityId}`);
                 }
+            });
+
+            this.socket.off('server_start_gathering');
+            this.socket.on('server_start_gathering', (data: { entityId: string, resourceX: number, resourceY: number, resourceType: string }) => {
+                console.log(`[Client Receive] Remote start gathering: worker ${data.entityId} at resource [${data.resourceX}, ${data.resourceY}]`);
+                const remoteUnit = this.entityManager.findUnitById(data.entityId);
+                if (remoteUnit && remoteUnit instanceof Worker) {
+                    const worker = remoteUnit as Worker;
+                    worker.cancelBuilding();
+                    worker.cancelHutAutomation();
+
+                    const resource = this.entityManager.resources.find(r => r.gridX === data.resourceX && r.gridY === data.resourceY);
+                    if (resource) {
+                        const startPos = { col: worker.gridX, row: worker.gridY };
+                        const adjTile = this.gridManager.findCardinalAdjacentWalkable(resource.gridX, resource.gridY, startPos);
+                        if (adjTile) {
+                            worker.setTargetResource(resource);
+                            this.gridManager.findPath(startPos, adjTile, (path) => {
+                                if (path) {
+                                    worker.moveAlongPath(path, () => {
+                                        worker.startGathering(resource);
+                                    });
+                                }
+                            });
+                        } else {
+                            // Already adjacent?
+                            const dx = Math.abs(worker.gridX - resource.gridX);
+                            const dy = Math.abs(worker.gridY - resource.gridY);
+                            if (dx + dy === 1) {
+                                worker.startGathering(resource);
+                            }
+                        }
+                    }
+                }
+            });
+
+            this.socket.off('server_start_constructing');
+            this.socket.on('server_start_constructing', (data: { entityId: string, buildingId: string }) => {
+                console.log(`[Client Receive] Remote start constructing: worker ${data.entityId} for building ${data.buildingId}`);
+                const remoteUnit = this.entityManager.findUnitById(data.entityId);
+                if (remoteUnit && remoteUnit instanceof Worker) {
+                    const worker = remoteUnit as Worker;
+                    worker.cancelBuilding();
+                    worker.cancelHutAutomation();
+
+                    const building = this.entityManager.buildings.find(b => b.id === data.buildingId);
+                    if (building) {
+                        const startPos = { col: worker.gridX, row: worker.gridY };
+                        const adjTile = this.entityManager.findAdjacentToBuilding(building, startPos);
+                        if (adjTile) {
+                            worker.isConstructionJob = true;
+                            worker.setTargetBuilding(building);
+                            this.gridManager.findPath(startPos, adjTile, (path) => {
+                                if (path) {
+                                    worker.moveAlongPath(path, () => {
+                                        if (!building.isCompleted) {
+                                            worker.startBuilding(building);
+                                        } else {
+                                            worker.cancelBuilding();
+                                            worker.setWorkerState('IDLE');
+                                        }
+                                    });
+                                }
+                            });
+                        } else {
+                            // Already adjacent?
+                            if (this.entityManager.isAdjacentToBuilding(worker, building)) {
+                                worker.startBuilding(building);
+                            }
+                        }
+                    }
+                }
+            });
+
+            this.socket.off('server_resource_depleted');
+            this.socket.on('server_resource_depleted', (data: { resourceX: number, resourceY: number, amount: number }) => {
+                console.log(`[Client Receive] Remote resource depletion at [${data.resourceX}, ${data.resourceY}] by amount ${data.amount}`);
+                const resource = this.entityManager.resources.find(r => r.gridX === data.resourceX && r.gridY === data.resourceY);
+                if (resource) {
+                    resource.takeDamage(data.amount);
+                }
+            });
+            this.socket.off('server_spawn_unit');
+            this.socket.on('server_spawn_unit', (data: { type: string, col: number, row: number, entityId: string, faction: 'blue' | 'red' }) => {
+                console.log(`[Client Receive] Remote unit spawn requested: ${data.type} with ID ${data.entityId}`);
+                if (this.entityManager.findUnitById(data.entityId)) return; // Prevent duplicate
+
+                const texturePrefix = data.faction === 'blue' ? 'pawn' : 'pawn-red';
+                const texture = `${texturePrefix}-idle`;
+
+                if (data.type === 'worker') {
+                    const worker = new Worker({
+                        scene: this,
+                        col: data.col,
+                        row: data.row,
+                        texture: texture,
+                        faction: data.faction,
+                        texturePrefix: texturePrefix,
+                        id: data.entityId
+                    });
+                    this.entityManager.addUnit(worker);
+                }
+            });
+
+            this.socket.off('server_unit_transformed');
+            this.socket.on('server_unit_transformed', (data: { oldEntityId: string, newEntityId: string, col: number, row: number, faction: 'blue' | 'red', barracksId: string }) => {
+                console.log("[Receiver Swap Triggered]", data);
+                
+                // 1. Destroy the remote copy of the pawn
+                const remotePawn = this.entityManager.getUnitById(data.oldEntityId);
+                if (remotePawn) {
+                    // Safely unselect from interaction handlers
+                    this.events.emit('force_deselect_unit', data.oldEntityId);
+                    
+                    remotePawn.destroy();
+                    this.entityManager.removeUnitFromList(data.oldEntityId);
+                }
+                
+                // 2. Wipe the placeholder queue indicator above the barracks
+                const barracks = this.entityManager.getBuildingById(data.barracksId) as Barracks;
+                if (barracks) {
+                    barracks.wipeRemoteRecruitPlaceholder();
+                }
+                
+                // 3. Spawn the synced Warrior sprite
+                this.entityManager.spawnWarrior(data.col, data.row, data.faction, data.newEntityId);
             });
 
             this.socket.off('server_build_structure');
@@ -149,6 +293,39 @@ export class GameScene extends Scene {
                     console.log(`[Client Success] Successfully spawned remote building ${data.entityId} and blocked grid.`);
                 }
             });
+
+            this.socket.off('server_resource_harvested');
+            this.socket.on('server_resource_harvested', (data: { resourceId: string, amountHarvested: number }) => {
+                console.log(`[Client Receive] Remote resource harvest: ${data.resourceId} by amount ${data.amountHarvested}`);
+                const resource = this.entityManager.resources.find(r => r.id === data.resourceId);
+                if (resource) {
+                    resource.takeDamage(data.amountHarvested);
+                }
+            });
+
+            this.socket.off('server_start_training');
+            this.socket.on('server_start_training', (data: { barracksId: string, unitType: string }) => {
+                console.log(`[Client Receive] Remote start training: barracks ${data.barracksId}, type ${data.unitType}`);
+                const barracks = this.entityManager.buildings.find(b => b.id === data.barracksId) as Barracks;
+                if (barracks) {
+                    barracks.addRemoteWorkerToQueue(data.unitType);
+                }
+            });
+
+            this.socket.off('server_construction_progress');
+            this.socket.on('server_construction_progress', (data: { buildingId: string, progress: number }) => {
+                console.log(`[Client Receive] Remote construction progress: building ${data.buildingId} is at ${data.progress}%`);
+                const building = this.entityManager.buildings.find(b => b.id === data.buildingId);
+                if (building) {
+                    building.progress = data.progress;
+                    building.updateProgressBar();
+                    building.updateConstructionVisuals();
+
+                    if (building.progress >= 100 && !building.isCompleted) {
+                        building.completeConstruction();
+                    }
+                }
+            });
         } else {
             console.error("[Phaser Fatal] Failed to inherit the active socket from React registry!");
         }
@@ -195,39 +372,35 @@ export class GameScene extends Scene {
             this.gridManager.blockTile(obs.col, obs.row);
         }
 
-        // Spawn Stronghold
-        const stronghold = new Stronghold({ scene: this, col: 15, row: 9, texture: 'castle', id: 'stronghold_0', faction: 'blue' });
-        this.entityManager.addBuilding(stronghold);
-        
-        // Block 5x2 area: col-2 to col+2, row-1 to row
-        // So for col 15, row 9: startCol 13, startRow 8, width 5, height 2
-        this.gridManager.blockArea(13, 8, 5, 2);
+        // ── Zone Blue (Left Starting Base) ──────────────────────
+        const strongholdBlue = new Stronghold({ scene: this, col: 6, row: 9, texture: 'castle', id: 'stronghold_blue', faction: 'blue' });
+        this.entityManager.addBuilding(strongholdBlue);
+        this.gridManager.blockArea(4, 8, 5, 2);
 
-        // Spawn King
-        const king = new King({ scene: this, col: 14, row: 9, texture: 'pawn-idle', id: 'king_0', faction: 'blue', texturePrefix: 'pawn' });
-        this.entityManager.addUnit(king);
+        const kingBlue = new King({ scene: this, col: 5, row: 9, texture: 'pawn-idle', id: 'king_blue', faction: 'blue', texturePrefix: 'pawn' });
+        this.entityManager.addUnit(kingBlue);
 
-        // Spawn initial Workers (deterministic faction locking)
-        const worker1 = new Worker({ 
-            scene: this, 
-            col: 14, 
-            row: 10, 
-            texture: 'pawn-idle', 
-            id: 'pawn_0', 
-            faction: 'blue', 
-            texturePrefix: 'pawn' 
-        });
-        const worker2 = new Worker({ 
-            scene: this, 
-            col: 17, 
-            row: 10, 
-            texture: 'pawn-red-idle', 
-            id: 'pawn_1', 
-            faction: 'red', 
-            texturePrefix: 'pawn-red' 
-        });
-        this.entityManager.addUnit(worker1);
-        this.entityManager.addUnit(worker2);
+        const bluePawn0 = new Worker({ scene: this, col: 5, row: 10, texture: 'pawn-idle', id: 'pawn_blue_0', faction: 'blue', texturePrefix: 'pawn' });
+        const bluePawn1 = new Worker({ scene: this, col: 6, row: 11, texture: 'pawn-idle', id: 'pawn_blue_1', faction: 'blue', texturePrefix: 'pawn' });
+        const bluePawn2 = new Worker({ scene: this, col: 7, row: 10, texture: 'pawn-idle', id: 'pawn_blue_2', faction: 'blue', texturePrefix: 'pawn' });
+        this.entityManager.addUnit(bluePawn0);
+        this.entityManager.addUnit(bluePawn1);
+        this.entityManager.addUnit(bluePawn2);
+
+        // ── Zone Red (Right Starting Base) ─────────────────────
+        const strongholdRed = new Stronghold({ scene: this, col: 25, row: 9, texture: 'castle', id: 'stronghold_red', faction: 'red' });
+        this.entityManager.addBuilding(strongholdRed);
+        this.gridManager.blockArea(23, 8, 5, 2);
+
+        const kingRed = new King({ scene: this, col: 24, row: 9, texture: 'pawn-red-idle', id: 'king_red', faction: 'red', texturePrefix: 'pawn-red' });
+        this.entityManager.addUnit(kingRed);
+
+        const redPawn0 = new Worker({ scene: this, col: 24, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_0', faction: 'red', texturePrefix: 'pawn-red' });
+        const redPawn1 = new Worker({ scene: this, col: 25, row: 11, texture: 'pawn-red-idle', id: 'pawn_red_1', faction: 'red', texturePrefix: 'pawn-red' });
+        const redPawn2 = new Worker({ scene: this, col: 26, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_2', faction: 'red', texturePrefix: 'pawn-red' });
+        this.entityManager.addUnit(redPawn0);
+        this.entityManager.addUnit(redPawn1);
+        this.entityManager.addUnit(redPawn2);
     }
 
     // --- Visuals & Input ---

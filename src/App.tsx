@@ -66,8 +66,10 @@ function SelectionPanel() {
     const selectedUnitType = useGameStore((s) => s.selectedUnitType);
     const trainingQueue = useGameStore((s) => s.trainingQueue);
     const trainingProgress = useGameStore((s) => s.trainingProgress);
-    const gold = useGameStore((s) => s.gold);
-    const availableWorkers = useGameStore((s) => s.availableWorkersCount);
+    const faction = useGameStore((s) => s.faction);
+    const resources = useGameStore((s) => s.resources[s.faction] || s.resources['blue']);
+    const gold = resources.gold;
+    const availableWorkers = resources.availableWorkersCount;
 
     // ── Warrior Disband Panel ──
     if (selectedUnitType === 'warrior' && selectedUnitId) {
@@ -204,12 +206,14 @@ function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [hasStarted, setHasStarted] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(true);
-    const wood = useGameStore((state) => state.wood);
-    const gold = useGameStore((state) => state.gold);
-    const currentPop = useGameStore((state) => state.currentPopulation);
-    const maxPop = useGameStore((state) => state.maxPopulation);
-    const workerCount = useGameStore((state) => state.workerCount);
-    const warriorCount = useGameStore((state) => state.warriorCount);
+    const faction = useGameStore((state) => state.faction);
+    const resources = useGameStore((state) => state.resources[state.faction] || state.resources['blue']);
+    const wood = resources.wood;
+    const gold = resources.gold;
+    const currentPop = resources.currentPopulation;
+    const maxPop = resources.maxPopulation;
+    const workerCount = resources.workerCount;
+    const warriorCount = resources.warriorCount;
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
     const setMultiplayerState = useGameStore((state) => state.setMultiplayerState);
 

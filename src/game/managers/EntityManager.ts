@@ -35,9 +35,10 @@ export class EntityManager {
         EventBus.on('train_warrior', (barracksId: string) => {
             const barracks = this.buildings.find(b => b.id === barracksId) as any;
             if (barracks && barracks.addWorkerToQueue) {
-                // Drafting Priority 1: IDLE or WANDERING (not assigned, not building)
+                // Drafting Priority 1: IDLE or WANDERING (not assigned, not building) of matching faction!
                 let draftedWorker = this.units.find(u => 
                     u instanceof Worker && 
+                    u.faction === barracks.faction &&
                     !u.isConstructionJob && 
                     !u.assignedHut && 
                     (u.workerState === 'IDLE' || (u.workerState === 'MOVING' && !u.isCarryingWood))
@@ -47,6 +48,7 @@ export class EntityManager {
                 if (!draftedWorker) {
                     draftedWorker = this.units.find(u => 
                         u instanceof Worker && 
+                        u.faction === barracks.faction &&
                         !u.isConstructionJob && 
                         u.assignedHut && 
                         u.workerState !== 'MOVING_TO_TRAIN'
@@ -144,6 +146,56 @@ export class EntityManager {
         }
     }
 
+    public spawnWarrior(col: number, row: number, faction: 'blue' | 'red', newEntityId: string): Warrior | undefined {
+        try {
+            console.log(`%c[Factory Spawn] Instantiating Warrior: ${newEntityId} at [${col}, ${row}]`, "color: #00ffff; font-weight:bold;");
+            
+            // Safe parameter type assertions to avoid NaN crashes
+            const finalCol = Number(col) || 0;
+            const finalRow = Number(row) || 0;
+
+            const texturePrefix = faction === 'blue' ? 'warrior' : 'warrior-red';
+            const texture = `${texturePrefix}-idle`;
+
+            const warrior = new Warrior({
+                scene: this.scene,
+                col: finalCol,
+                row: finalRow,
+                texture: texture,
+                faction: faction,
+                texturePrefix: texturePrefix,
+                id: newEntityId
+            });
+
+            // Visual tinting alignment
+            if (faction === 'red') {
+                warrior.mainSprite.setTint(0xff4444);
+            } else {
+                warrior.mainSprite.setTint(0x4444ff);
+            }
+
+            this.addUnit(warrior);
+            
+            console.log(`%c[Factory Spawn] Success! Warrior ${newEntityId} injected into active simulation layout.`, "color: #00ff00;");
+            return warrior;
+        } catch (err) {
+            console.error("%c[Factory Spawn Crash] Spawning failed! Review trace:", "color: #ff0000;", err);
+        }
+    }
+
+    public getUnitById(id: string): BaseUnit | undefined {
+        return this.findUnitById(id);
+    }
+
+    public removeUnitFromList(id: string): void {
+        this.units = this.units.filter(u => u.id !== id);
+        this.recalculatePopulation();
+    }
+
+    public getBuildingById(id: string): BaseBuilding | undefined {
+        return this.buildings.find(b => b.id === id);
+    }
+
     public addBuilding(building: BaseBuilding) {
         this.buildings.push(building);
     }
@@ -165,7 +217,10 @@ export class EntityManager {
 
         // Population spawn check (every 10s)
         const store = useGameStore.getState();
-        if (store.currentPopulation < store.maxPopulation) {
+        const localFaction = store.faction || 'blue';
+        const localResources = store.resources[localFaction];
+
+        if (localResources.currentPopulation < localResources.maxPopulation) {
             this.spawnTimer += delta;
             if (this.spawnTimer >= 10000) {
                 this.spawnTimer = 0;
@@ -176,9 +231,9 @@ export class EntityManager {
         }
 
         // Sync Spawn Timer to Stronghold
-        const stronghold = this.buildings.find(b => b.buildingType === 'stronghold') as any;
+        const stronghold = this.buildings.find(b => b.buildingType === 'stronghold' && b.faction === localFaction) as any;
         if (stronghold && stronghold.updateSpawnBar) {
-            const isSpawning = store.currentPopulation < store.maxPopulation;
+            const isSpawning = localResources.currentPopulation < localResources.maxPopulation;
             stronghold.updateSpawnBar(isSpawning ? this.spawnTimer / 10000 : 0, isSpawning);
         }
 
@@ -199,47 +254,81 @@ export class EntityManager {
 
     public recalculatePopulation() {
         const store = useGameStore.getState();
-        const completedHouses = this.buildings.filter(b => b.buildingType === 'house' && b.isCompleted).length;
-        const maxPop = 5 + (completedHouses * 5);
-        const currentPop = this.units.filter(u => u instanceof Worker || u instanceof Warrior).length;
+        const factions: ('blue' | 'red')[] = ['blue', 'red'];
         
-        const availableWorkers = this.units.filter(u => 
-            u instanceof Worker && 
-            !u.isConstructionJob && 
-            u.workerState !== 'MOVING_TO_TRAIN'
-        ).length;
+        let localResult = { currentPop: 0, maxPop: 5, availableWorkers: 0, workerCount: 0, warriorCount: 0 };
+
+        for (const f of factions) {
+            const completedHouses = this.buildings.filter(b => b.buildingType === 'house' && b.isCompleted && b.faction === f).length;
+            const maxPop = 5 + (completedHouses * 5);
+            const currentPop = this.units.filter(u => (u instanceof Worker || u instanceof Warrior) && u.faction === f).length;
+            
+            const availableWorkers = this.units.filter(u => 
+                u.faction === f &&
+                u instanceof Worker && 
+                !u.isConstructionJob && 
+                u.workerState !== 'MOVING_TO_TRAIN'
+            ).length;
+            
+            const workerCount = this.units.filter(u => u instanceof Worker && u.faction === f).length;
+            const warriorCount = this.units.filter(u => u instanceof Warrior && u.faction === f).length;
+            
+            // Set for each faction individually in the Zustand store
+            store.setFactionPopulation(f, currentPop, maxPop, availableWorkers, workerCount, warriorCount);
+
+            if (f === store.faction) {
+                localResult = { currentPop, maxPop, availableWorkers, workerCount, warriorCount };
+            }
+        }
         
-        const workerCount = this.units.filter(u => u instanceof Worker).length;
-        const warriorCount = this.units.filter(u => u instanceof Warrior).length;
-        
-        store.setPopulation(currentPop, maxPop, availableWorkers, workerCount, warriorCount);
-        return { currentPop, maxPop, availableWorkers, workerCount, warriorCount };
+        return localResult;
     }
 
     private checkPopulationAndSpawn() {
-        const { currentPop, maxPop, availableWorkers } = this.recalculatePopulation();
+        // Recalculate population to update store
+        this.recalculatePopulation();
+        
         const store = useGameStore.getState();
+        const faction = store.faction || 'blue';
+        const factionData = store.resources[faction];
 
-        if (currentPop < maxPop) {
-            const stronghold = this.buildings.find(b => b.buildingType === 'stronghold');
+        if (factionData.currentPopulation < factionData.maxPopulation) {
+            // Find a stronghold matching our OWN faction!
+            const stronghold = this.buildings.find(b => b.buildingType === 'stronghold' && b.faction === faction);
             if (stronghold) {
                 // Anti-stacking: Find a random walkable tile near the stronghold (radius 2)
                 // Fallback to row + 2 if no tiles are available
                 const spawnTile = this.gridManager.getRandomWalkableTileInRange(stronghold.gridX, stronghold.gridY, 2) 
                     || { col: stronghold.gridX, row: stronghold.gridY + 2 };
 
-                const faction = stronghold.faction || 'blue';
                 const texturePrefix = faction === 'blue' ? 'pawn' : 'pawn-red';
                 const texture = `${texturePrefix}-idle`;
+                const entityId = `pawn_${faction}_${Date.now()}`;
+
                 const worker = new Worker({ 
                     scene: this.scene, 
                     col: spawnTile.col, 
                     row: spawnTile.row, 
                     texture: texture,
                     faction: faction,
-                    texturePrefix: texturePrefix
+                    texturePrefix: texturePrefix,
+                    id: entityId
                 });
                 this.addUnit(worker);
+
+                // Multiplayer Spawn Unit Sync
+                const activeSocket = this.scene.game.registry.get('socket');
+                if (activeSocket && store.roomId) {
+                    console.log(`[Spawn Sync] Syncing spawn of ${entityId} at [Col:${spawnTile.col}, Row:${spawnTile.row}]`);
+                    activeSocket.emit('client_spawn_unit', {
+                        roomId: String(store.roomId).trim(),
+                        type: 'worker',
+                        col: spawnTile.col,
+                        row: spawnTile.row,
+                        entityId,
+                        faction
+                    });
+                }
             }
         }
     }
@@ -265,7 +354,16 @@ export class EntityManager {
     // ══════════════════════════════════════════════════════════
 
     private processWanderingAI() {
+        const store = useGameStore.getState();
+        const isMultiplayer = !!store.roomId;
+
         for (const unit of this.units) {
+            // Wandering Synchronization Lock:
+            // In multiplayer, only wander if we own the unit (faction matches local player's faction)
+            if (isMultiplayer && unit.faction !== store.faction) {
+                continue; 
+            }
+
             if (unit.canWander && unit.idleTimer > unit.wanderDelay) {
                 unit.idleTimer = 0; // Reset immediately to prevent rapid re-triggering
 
@@ -288,6 +386,18 @@ export class EntityManager {
                         // Check canWander again in case state changed during async pathfinding
                         if (path && unit.canWander) { 
                             unit.moveAlongPath(path);
+
+                            // Sync wandering move to opponent
+                            const activeSocket = this.scene.game.registry.get('socket');
+                            if (activeSocket && store.roomId) {
+                                console.log(`[Wandering Sync] Syncing wandering movement for ${unit.id} to Col:${targetTile.col}, Row:${targetTile.row}`);
+                                activeSocket.emit('client_unit_move', {
+                                    roomId: String(store.roomId).trim(),
+                                    entityId: unit.id,
+                                    targetCol: targetTile.col,
+                                    targetRow: targetTile.row
+                                });
+                            }
                         }
                     });
                 }
@@ -303,8 +413,15 @@ export class EntityManager {
      * Auto-assign idle workers to jobs based on a 3-tier priority system.
      */
     private assignIdleWorkers() {
+        const store = useGameStore.getState();
+        const isMultiplayer = !!store.roomId;
+
         let idleWorkers = this.units.filter(
-            u => u instanceof Worker && u.workerState === 'IDLE' && !(u as Worker).isConstructionJob && !(u as Worker).assignedHut
+            u => u instanceof Worker && 
+                 u.workerState === 'IDLE' && 
+                 !(u as Worker).isConstructionJob && 
+                 !(u as Worker).assignedHut &&
+                 (!isMultiplayer || u.faction === store.faction) // ONLY our own workers!
         ) as Worker[];
 
         if (idleWorkers.length === 0) return;
@@ -316,13 +433,20 @@ export class EntityManager {
             let needed = building.availableBuilderSpots;
             if (needed <= 0) continue;
 
-            idleWorkers.sort((a, b) => {
+            // Faction Lock: Only workers matching the building's faction can build it
+            const matchingWorkers = idleWorkers.filter(w => w.faction === building.faction);
+            if (matchingWorkers.length === 0) continue;
+
+            matchingWorkers.sort((a, b) => {
                 const distA = Math.abs(a.gridX - building.gridX) + Math.abs(a.gridY - building.gridY);
                 const distB = Math.abs(b.gridX - building.gridX) + Math.abs(b.gridY - building.gridY);
                 return distA - distB;
             });
 
-            const toAssign = idleWorkers.splice(0, needed);
+            const toAssign = matchingWorkers.slice(0, needed);
+            // Remove assigned workers from the main idleWorkers pool
+            idleWorkers = idleWorkers.filter(w => !toAssign.includes(w));
+
             for (const worker of toAssign) {
                 this.dispatchWorkerToBuilding(worker, building);
             }
@@ -339,13 +463,20 @@ export class EntityManager {
             let needed = Math.max(0, hut.maxWorkers - hut.assignedWorkers.length);
             if (needed <= 0) continue;
 
-            idleWorkers.sort((a, b) => {
+            // Faction Lock: Only workers matching the hut's faction can occupy it
+            const matchingWorkers = idleWorkers.filter(w => w.faction === hut.faction);
+            if (matchingWorkers.length === 0) continue;
+
+            matchingWorkers.sort((a, b) => {
                 const distA = Math.abs(a.gridX - hut.gridX) + Math.abs(a.gridY - hut.gridY);
                 const distB = Math.abs(b.gridX - hut.gridX) + Math.abs(b.gridY - hut.gridY);
                 return distA - distB;
             });
 
-            const toAssign = idleWorkers.splice(0, needed);
+            const toAssign = matchingWorkers.slice(0, needed);
+            // Remove assigned workers from the main idleWorkers pool
+            idleWorkers = idleWorkers.filter(w => !toAssign.includes(w));
+
             for (const worker of toAssign) {
                 this.dispatchWorkerToHut(worker, hut);
             }
@@ -512,7 +643,7 @@ export class EntityManager {
     /**
      * Check if a worker is adjacent to any tile of a building's footprint.
      */
-    private isAdjacentToBuilding(worker: Worker, building: BaseBuilding): boolean {
+    public isAdjacentToBuilding(worker: Worker, building: BaseBuilding): boolean {
         for (let r = 0; r < building.footprint.height; r++) {
             for (let c = 0; c < building.footprint.width; c++) {
                 const bCol = building.gridX + c;
@@ -531,7 +662,7 @@ export class EntityManager {
     /**
      * Find the best adjacent walkable tile next to any tile in the building's footprint.
      */
-    private findAdjacentToBuilding(building: BaseBuilding, startPos: GridPosition): GridPosition | null {
+    public findAdjacentToBuilding(building: BaseBuilding, startPos: GridPosition): GridPosition | null {
         let bestTile: GridPosition | null = null;
         let bestDist = Infinity;
 
@@ -580,8 +711,13 @@ export class EntityManager {
     /**
      * Find the nearest building that accepts a specific resource drop-off.
      */
-    public getNearestDropOff(fromPos: GridPosition, resourceType: string): BaseBuilding | undefined {
-        const matching = this.buildings.filter(b => b.isDropOff && b.isCompleted && b.acceptedResources.includes(resourceType));
+    public getNearestDropOff(fromPos: GridPosition, resourceType: string, faction?: 'blue' | 'red'): BaseBuilding | undefined {
+        const matching = this.buildings.filter(b => 
+            b.isDropOff && 
+            b.isCompleted && 
+            b.acceptedResources.includes(resourceType) &&
+            (!faction || b.faction === faction)
+        );
         if (matching.length === 0) return undefined;
 
         let nearest = matching[0];

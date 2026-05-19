@@ -104,7 +104,7 @@ export abstract class BaseBuilding extends BaseEntity {
         }
     }
 
-    private updateConstructionVisuals() {
+    public updateConstructionVisuals() {
         if (this.constructionTiles.length === 0) return;
 
         // How much progress is needed per tile
@@ -125,7 +125,7 @@ export abstract class BaseBuilding extends BaseEntity {
     /**
      * Draw/update the progress bar visuals.
      */
-    private updateProgressBar() {
+    public updateProgressBar() {
         const show = this.progress > 0 && this.progress < 100;
         this.progressBarBg.setVisible(show);
         this.progressBarFill.setVisible(show);

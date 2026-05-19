@@ -47,9 +47,11 @@ export class InteractionManager {
         this.tapIndicator.setDepth(5);
 
         // Listen for force-deselect events (e.g. after disband)
-        this.scene.events.on('force_deselect_unit', () => {
-            this.selectedUnit = null;
-            useGameStore.getState().setSelectedUnit(null, null);
+        this.scene.events.on('force_deselect_unit', (unitId?: string) => {
+            if (!unitId || (this.selectedUnit && this.selectedUnit.id === unitId)) {
+                this.selectedUnit = null;
+                useGameStore.getState().setSelectedUnit(null, null);
+            }
         });
 
         this.scene.events.on('resource_collected', (worker: Worker) => {
@@ -395,9 +397,41 @@ export class InteractionManager {
 
             if (isCardinalAdjacent) {
                 worker.startGathering(resource);
+
+                // Sync gathering immediately
+                const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
+                const store = useGameStore.getState();
+                if (activeSocket && store.roomId) {
+                    activeSocket.emit('client_start_gathering', {
+                        roomId: String(store.roomId).trim(),
+                        entityId: worker.id,
+                        resourceX: resource.gridX,
+                        resourceY: resource.gridY,
+                        resourceType: resource.resourceType
+                    });
+                }
             } else {
                 const adjTile = this.gridManager.findCardinalAdjacentWalkable(resource.gridX, resource.gridY, startPos);
                 if (adjTile) {
+                    // Sync walking to resource node
+                    const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
+                    const store = useGameStore.getState();
+                    if (activeSocket && store.roomId) {
+                        activeSocket.emit('client_unit_move', {
+                            roomId: String(store.roomId).trim(),
+                            entityId: worker.id,
+                            targetCol: adjTile.col,
+                            targetRow: adjTile.row
+                        });
+                        activeSocket.emit('client_start_gathering', {
+                            roomId: String(store.roomId).trim(),
+                            entityId: worker.id,
+                            resourceX: resource.gridX,
+                            resourceY: resource.gridY,
+                            resourceType: resource.resourceType
+                        });
+                    }
+
                     this.gridManager.findPath(startPos, adjTile, (path) => {
                         if (path) {
                             worker.moveAlongPath(path, () => {
@@ -581,7 +615,7 @@ export class InteractionManager {
         const rType = worker.carriedResourceType || 'wood';
         
         // Find nearest drop-off point, prioritizing assigned hut if automating
-        const dropOff = worker.assignedHut || this.entityManager.getNearestDropOff(currentPos, rType);
+        const dropOff = worker.assignedHut || this.entityManager.getNearestDropOff(currentPos, rType, worker.faction);
         if (!dropOff) return;
 
         const adjTile = this.gridManager.findAdjacentWalkable(dropOff.gridX, dropOff.gridY, currentPos);

@@ -7,6 +7,9 @@ export abstract class BaseResource extends BaseEntity {
     public yieldPerHit: number;
 
     constructor(config: ResourceConfig) {
+        if (config.col !== undefined && config.row !== undefined) {
+            config.id = `node_${config.col}_${config.row}`;
+        }
         super(config);
         // Cast since ResourceType is a specific union string type
         this.resourceType = config.resourceType as ResourceType; 
