@@ -72,8 +72,16 @@ export class King extends BaseUnit {
     }
 
     protected override onDeath(): void {
-        useGameStore.getState().setGameOver(true);
+        const store = useGameStore.getState();
+        const localFaction = store.faction || 'blue';
+        const isPlayerKing = this.faction === localFaction;
+        const result: 'victory' | 'defeat' = isPlayerKing ? 'defeat' : 'victory';
+
+        store.setGameOver(true, result);
         this.mainSprite.setTint(0xff0000);
-        this.mainSprite.setAlpha(0.5);
+        this.mainSprite.setAlpha(0.6);
+
+        super.onDeath();
     }
 }
+

@@ -240,6 +240,5 @@ export class GridManager {
             row: Math.floor(y / TILE_SIZE),
         };
     }
-
-
 }
+

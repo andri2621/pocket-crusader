@@ -18,7 +18,6 @@ export class GoldResource extends BaseResource {
             new Phaser.Geom.Rectangle(-32, -64, 64, 64),
             Phaser.Geom.Rectangle.Contains
         );
-        this.scene.input.enableDebug(this, 0xff0000);
         
         this.updateTextureStage();
     }

@@ -11,6 +11,7 @@ export class Barracks extends BaseBuilding {
     public trainingRecruits: { workerId: string, unitType: string, status: 'walking' | 'training' }[] = [];
     public currentTrainingProgress: number = 0;
     public currentTrainingPawnId: string | null = null;
+    private lastSyncedProgress: number = -1;
     
     private entityManager: any;
     
@@ -256,6 +257,7 @@ export class Barracks extends BaseBuilding {
                 this.trainingTimer = null;
             }
             this.currentTrainingProgress = 0;
+            this.lastSyncedProgress = -1;
             this.trainingProgressBarBg.setVisible(false);
             this.trainingProgressBarFill.setVisible(false);
         } else {
@@ -266,6 +268,7 @@ export class Barracks extends BaseBuilding {
                 this.trainingTimer = null;
             }
             this.currentTrainingProgress = 0;
+            this.lastSyncedProgress = -1;
             this.trainingProgressBarBg.setVisible(false);
             this.trainingProgressBarFill.setVisible(false);
             this.scene.time.delayedCall(0, () => {
@@ -307,13 +310,14 @@ export class Barracks extends BaseBuilding {
             this.currentTrainingProgress = this.trainingTimer.getOverallProgress();
             this.updateTrainingBar(this.currentTrainingProgress);
             
-            // Periodically sync progress (maybe not every frame to save performance, but we can do it for smooth UI)
+            // Throttle store sync: only update React if progress changed by >= 0.05 (5%) or reached completion
             const store = useGameStore.getState();
             if (store.selectedBuildingId === this.id) {
-                // To avoid React re-renders every frame, we only update store if progress changed significantly
-                // OR we can just rely on Phaser update. For now, sync.
-                const uiQueue = this.trainingRecruits.map(r => r.unitType);
-                store.setTrainingState(uiQueue, this.currentTrainingProgress);
+                if (Math.abs(this.currentTrainingProgress - this.lastSyncedProgress) >= 0.05 || this.currentTrainingProgress >= 1) {
+                    this.lastSyncedProgress = this.currentTrainingProgress;
+                    const uiQueue = this.trainingRecruits.map(r => r.unitType);
+                    store.setTrainingState(uiQueue, this.currentTrainingProgress);
+                }
             }
         }
     }

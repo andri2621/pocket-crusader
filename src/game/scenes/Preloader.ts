@@ -29,6 +29,14 @@ export class Preloader extends Scene
         this.load.on('progress', (progress: number) => {
             bar.width = 4 + (312 * progress);
         });
+
+        this.load.on('complete', () => {
+            console.log('[Preloader] load complete event fired!');
+        });
+
+        this.load.on('loaderror', (file: any) => {
+            console.error('[Preloader Error] Failed to load asset:', file.key, file.src);
+        });
     }
 
     preload ()
@@ -130,6 +138,7 @@ export class Preloader extends Scene
 
     create ()
     {
+        console.log('[Preloader] All assets loaded! Starting GameScene...');
         //  All assets loaded — start the game
         this.scene.start('GameScene');
     }

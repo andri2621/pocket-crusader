@@ -14,6 +14,7 @@ import { House } from '../entities/House';
 import { GoldHut } from '../entities/GoldHut';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { useGameStore } from '../../store/useGameStore';
+import { AIManager } from '../managers/AIManager';
 
 const MAP_WIDTH = GRID_COLS * TILE_SIZE;
 const MAP_HEIGHT = GRID_ROWS * TILE_SIZE;
@@ -24,6 +25,7 @@ export class GameScene extends Scene {
     private gridManager: GridManager;
     private entityManager: EntityManager;
     private interactionManager: InteractionManager;
+    private aiManager: AIManager | null = null;
 
     private gridGraphics: Phaser.GameObjects.Graphics;
     private pinchStartDistance: number = 0;
@@ -44,8 +46,18 @@ export class GameScene extends Scene {
         this.entityManager = new EntityManager(this, this.gridManager);
         this.interactionManager = new InteractionManager(this, this.entityManager, this.gridManager);
 
+        // Check if playing single-player skirmish
+        const store = useGameStore.getState();
+        const isSinglePlayer = !store.roomId || store.roomId === 'solo_skirmish';
+        if (isSinglePlayer) {
+            const enemyFaction = store.faction === 'blue' ? 'red' : 'blue';
+            this.aiManager = new AIManager(this, this.entityManager, this.gridManager, enemyFaction);
+            console.log(`[AIManager] Spawned autonomous Skirmish AI for ${enemyFaction} faction.`);
+        }
+
         // 2. Spawn Initial State
         this.spawnInitialWorld();
+
 
         // 3. Setup Camera
         this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
@@ -338,7 +350,11 @@ export class GameScene extends Scene {
         this.interactionManager.updateGhost();
         this.gridManager.update();
         this.entityManager.update(time, delta);
+        if (this.aiManager) {
+            this.aiManager.update(time, delta);
+        }
     }
+
 
     private spawnInitialWorld() {
         // Spawn Trees
@@ -383,9 +399,11 @@ export class GameScene extends Scene {
         const bluePawn0 = new Worker({ scene: this, col: 5, row: 10, texture: 'pawn-idle', id: 'pawn_blue_0', faction: 'blue', texturePrefix: 'pawn' });
         const bluePawn1 = new Worker({ scene: this, col: 6, row: 11, texture: 'pawn-idle', id: 'pawn_blue_1', faction: 'blue', texturePrefix: 'pawn' });
         const bluePawn2 = new Worker({ scene: this, col: 7, row: 10, texture: 'pawn-idle', id: 'pawn_blue_2', faction: 'blue', texturePrefix: 'pawn' });
+        const blueWarrior = new Warrior({ scene: this, col: 5, row: 6, texture: 'warrior-idle', id: 'warrior_blue_0', faction: 'blue', texturePrefix: 'warrior' });
         this.entityManager.addUnit(bluePawn0);
         this.entityManager.addUnit(bluePawn1);
         this.entityManager.addUnit(bluePawn2);
+        this.entityManager.addUnit(blueWarrior);
 
         // ── Zone Red (Right Starting Base) ─────────────────────
         const strongholdRed = new Stronghold({ scene: this, col: 25, row: 9, texture: 'castle', id: 'stronghold_red', faction: 'red' });
@@ -398,10 +416,14 @@ export class GameScene extends Scene {
         const redPawn0 = new Worker({ scene: this, col: 24, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_0', faction: 'red', texturePrefix: 'pawn-red' });
         const redPawn1 = new Worker({ scene: this, col: 25, row: 11, texture: 'pawn-red-idle', id: 'pawn_red_1', faction: 'red', texturePrefix: 'pawn-red' });
         const redPawn2 = new Worker({ scene: this, col: 26, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_2', faction: 'red', texturePrefix: 'pawn-red' });
+        const redWarrior = new Warrior({ scene: this, col: 25, row: 6, texture: 'warrior-red-idle', id: 'warrior_red_0', faction: 'red', texturePrefix: 'warrior-red' });
         this.entityManager.addUnit(redPawn0);
         this.entityManager.addUnit(redPawn1);
         this.entityManager.addUnit(redPawn2);
+        this.entityManager.addUnit(redWarrior);
+
     }
+
 
     // --- Visuals & Input ---
 

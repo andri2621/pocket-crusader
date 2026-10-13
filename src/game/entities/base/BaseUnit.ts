@@ -154,6 +154,23 @@ export abstract class BaseUnit extends BaseEntity {
         }
     }
 
+    protected override onDeath(): void {
+        this.cancelMovement();
+        this.disableInteractive();
+        this.emit('death', this);
+
+        this.scene.tweens.add({
+            targets: this.mainSprite,
+            alpha: 0,
+            y: this.mainSprite.y + 12,
+            duration: 400,
+            ease: 'Power2',
+            onComplete: () => {
+                this.destroy();
+            }
+        });
+    }
+
     public override update(time: number, delta: number): void {
         const store = useGameStore.getState();
         const isMultiplayer = !!store.roomId;
@@ -170,3 +187,4 @@ export abstract class BaseUnit extends BaseEntity {
         }
     }
 }
+

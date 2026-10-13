@@ -215,6 +215,8 @@ function App() {
     const workerCount = resources.workerCount;
     const warriorCount = resources.warriorCount;
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
+    const isGameOver = useGameStore((state) => state.isGameOver);
+    const gameResult = useGameStore((state) => state.gameResult);
     const setMultiplayerState = useGameStore((state) => state.setMultiplayerState);
 
     const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
@@ -241,11 +243,11 @@ function App() {
                 setMultiplayerState(data.roomId, data.isHost, data.faction);
             });
 
-            socket.on('room_ready', async (data: { roomId: string, players: any[] }) => {
+            socket.on('room_ready', (data: { roomId: string, players: any[] }) => {
                 setLobbyStatus('Room is ready! Starting game...');
-                await requestFullscreenAndLock();
                 setHasStarted(true);
                 setIsFullscreen(true);
+                requestFullscreenAndLock().catch(() => {});
             });
 
             socket.on('room_error', (data: { message: string }) => {
@@ -266,6 +268,13 @@ function App() {
             code += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return code;
+    };
+
+    const handleStartSoloSkirmish = () => {
+        setMultiplayerState('solo_skirmish', true, 'blue');
+        setHasStarted(true);
+        setIsFullscreen(true);
+        requestFullscreenAndLock().catch(() => {});
     };
 
     const handleCreateRoom = () => {
@@ -335,15 +344,21 @@ function App() {
                     <div className={styles.panel}>
                         <div className={styles.content}>
                             <h1 className={styles.title}>Pocket Crusader</h1>
-                            <p className={styles.subtitle}>Mobile-First Multiplayer RTS</p>
+                            <p className={styles.subtitle}>Mobile-First Medieval RTS</p>
                             
                             {!createdRoomId ? (
                                 <div className={styles.lobbyActions}>
-                                    <button className={styles.lobbyBtnPrimary} onClick={handleCreateRoom}>
+                                    <button className={styles.lobbyBtnPrimary} onClick={handleStartSoloSkirmish} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}>
+                                        Play Solo (Skirmish)
+                                    </button>
+
+                                    <div className={styles.dividerText}>OR MULTIPLAYER</div>
+
+                                    <button className={styles.lobbyBtnSecondary} onClick={handleCreateRoom}>
                                         Create Room
                                     </button>
                                     
-                                    <div className={styles.dividerText}>OR</div>
+                                    <div className={styles.dividerText}>OR JOIN</div>
                                     
                                     <div className={styles.joinContainer}>
                                         <input 
@@ -366,21 +381,6 @@ function App() {
                                     <p className={styles.lobbyStatus}>{lobbyStatus}</p>
                                 </div>
                             )}
-                        </div>
-                    </div>
-                </div>
-            )}
-            
-            {/* Fullscreen Recovery Overlay */}
-            {hasStarted && !isFullscreen && (
-                <div className={styles.overlay}>
-                    <div className={styles.panel}>
-                        <div className={styles.content}>
-                            <h2 className={styles.title} style={{ fontSize: '32px' }}>Game Paused</h2>
-                            <p className={styles.subtitle}>Please return to fullscreen to continue playing.</p>
-                            <button className={styles.playButton} onClick={handleResumeClick}>
-                                Resume
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -423,17 +423,18 @@ function App() {
                         </button>
                     </div>
 
-                    {/* Quick Action Sidebar (Layout Only) */}
+                    {/* Quick Action Sidebar */}
                     <div className={styles.quickSidebar}>
-                        <div className={styles.quickSidebarItem}>
+                        <div className={styles.quickSidebarItem} onClick={() => EventBus.emit('select_idle_worker')} title="Select Worker">
                             <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Workers" />
                             <div className={styles.stackBadge}>{workerCount}</div>
                         </div>
-                        <div className={styles.quickSidebarItem}>
+                        <div className={styles.quickSidebarItem} onClick={() => EventBus.emit('select_idle_warrior')} title="Select Warrior">
                             <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt="Warriors" />
                             <div className={styles.stackBadge}>{warriorCount}</div>
                         </div>
                     </div>
+
 
                     {/* Selection Panel */}
                     {!isPlacing && <SelectionPanel />}
@@ -447,9 +448,46 @@ function App() {
 
                     {/* Build Menu */}
                     <BuildMenu wood={wood} gold={gold} />
+
+                    {/* Victory / Defeat Modal */}
+                    {isGameOver && (
+                        <div className={styles.modalOverlay}>
+                            <div className={`${styles.modalCard} ${gameResult === 'victory' ? styles.modalVictory : styles.modalDefeat}`}>
+                                <div className={styles.modalIcon}>
+                                    {gameResult === 'victory' ? '👑' : '💀'}
+                                </div>
+                                <h2 className={styles.modalTitle}>
+                                    {gameResult === 'victory' ? 'VICTORY!' : 'DEFEAT'}
+                                </h2>
+                                <p className={styles.modalDescription}>
+                                    {gameResult === 'victory'
+                                        ? 'The enemy King has fallen! Your crusader kingdom reigns supreme.'
+                                        : 'Your King has perished in battle. The fortress has fallen.'}
+                                </p>
+                                <div className={styles.modalStats}>
+                                    <div className={styles.modalStatItem}>
+                                        <span>🪵 Wood Harvested</span>
+                                        <strong>{wood}</strong>
+                                    </div>
+                                    <div className={styles.modalStatItem}>
+                                        <span>💰 Gold Harvested</span>
+                                        <strong>{gold}</strong>
+                                    </div>
+                                    <div className={styles.modalStatItem}>
+                                        <span>⚔️ Army Size</span>
+                                        <strong>{warriorCount} Warriors</strong>
+                                    </div>
+                                </div>
+                                <button className={styles.modalRestartBtn} onClick={() => window.location.reload()}>
+                                    Play Again
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>
+
     );
 }
 

@@ -1,8 +1,10 @@
 import { StateCreator } from 'zustand';
+import type { GameStore } from '../types';
 
 export interface GameStateSlice {
     isGameOver: boolean;
-    setGameOver: (isOver: boolean) => void;
+    gameResult: 'victory' | 'defeat' | null;
+    setGameOver: (isOver: boolean, result?: 'victory' | 'defeat' | null) => void;
     currentPopulation: number;
     maxPopulation: number;
     availableWorkersCount: number;
@@ -19,9 +21,12 @@ export interface GameStateSlice {
     setFactionPopulation: (faction: 'blue' | 'red', current: number, max: number, availableWorkers: number, workers: number, warriors: number) => void;
 }
 
-export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
+export const createGameStateSlice: StateCreator<GameStore, [], [], GameStateSlice> = (set) => ({
     isGameOver: false,
-    setGameOver: (isOver: boolean) => set({ isGameOver: isOver }),
+    gameResult: null,
+    setGameOver: (isOver: boolean, result: 'victory' | 'defeat' | null = null) => 
+        set({ isGameOver: isOver, gameResult: result }),
+
     currentPopulation: 0,
     maxPopulation: 5,
     availableWorkersCount: 0,
@@ -34,7 +39,7 @@ export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
     setMultiplayerState: (roomId: string, isHost: boolean, faction: 'blue' | 'red') => 
         set({ roomId, isHost, faction }),
         
-    setPopulation: (current: number, max: number, availableWorkers: number, workers: number, warriors: number) => set((state: any) => {
+    setPopulation: (current: number, max: number, availableWorkers: number, workers: number, warriors: number) => set((state) => {
         const faction = state.faction || 'blue';
         const newResources = {
             ...state.resources,
@@ -54,10 +59,10 @@ export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
             availableWorkersCount: newResources[faction].availableWorkersCount,
             workerCount: newResources[faction].workerCount,
             warriorCount: newResources[faction].warriorCount
-        } as any;
+        };
     }),
 
-    setFactionPopulation: (faction: 'blue' | 'red', current: number, max: number, availableWorkers: number, workers: number, warriors: number) => set((state: any) => {
+    setFactionPopulation: (faction: 'blue' | 'red', current: number, max: number, availableWorkers: number, workers: number, warriors: number) => set((state) => {
         const newResources = {
             ...state.resources,
             [faction]: {
@@ -77,6 +82,6 @@ export const createGameStateSlice: StateCreator<GameStateSlice> = (set) => ({
             availableWorkersCount: newResources[localFaction].availableWorkersCount,
             workerCount: newResources[localFaction].workerCount,
             warriorCount: newResources[localFaction].warriorCount
-        } as any;
+        };
     }),
 });

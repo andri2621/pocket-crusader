@@ -1,4 +1,5 @@
 import { StateCreator } from 'zustand';
+import type { GameStore } from '../types';
 
 export interface UISlice {
     isBuildMenuOpen: boolean;
@@ -20,7 +21,7 @@ export interface UISlice {
     setTrainingState: (queue: string[], progress: number) => void;
 }
 
-export const createUISlice: StateCreator<UISlice> = (set) => ({
+export const createUISlice: StateCreator<GameStore, [], [], UISlice> = (set) => ({
     isBuildMenuOpen: false,
     toggleBuildMenu: () => set((state) => ({ isBuildMenuOpen: !state.isBuildMenuOpen })),
     isPlacingBuilding: null,

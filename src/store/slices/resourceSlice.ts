@@ -1,4 +1,5 @@
 import { StateCreator } from 'zustand';
+import type { GameStore } from '../types';
 
 export interface FactionResources {
     wood: number;
@@ -25,7 +26,7 @@ export interface ResourceSlice {
     addFactionGold: (faction: 'blue' | 'red', amount: number) => void;
 }
 
-export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
+export const createResourceSlice: StateCreator<GameStore, [], [], ResourceSlice> = (set) => ({
     wood: 300,
     gold: 300,
     resources: {
@@ -48,7 +49,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             warriorCount: 0
         }
     },
-    addWood: (amount: number, faction?: 'blue' | 'red') => set((state: any) => {
+    addWood: (amount: number, faction?: 'blue' | 'red') => set((state) => {
         const targetFaction = faction || state.faction || 'blue';
         const newResources = {
             ...state.resources,
@@ -63,7 +64,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             wood: newResources[localFaction].wood
         };
     }),
-    addGold: (amount: number, faction?: 'blue' | 'red') => set((state: any) => {
+    addGold: (amount: number, faction?: 'blue' | 'red') => set((state) => {
         const targetFaction = faction || state.faction || 'blue';
         const newResources = {
             ...state.resources,
@@ -78,7 +79,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             gold: newResources[localFaction].gold
         };
     }),
-    deductWood: (amount: number, faction?: 'blue' | 'red') => set((state: any) => {
+    deductWood: (amount: number, faction?: 'blue' | 'red') => set((state) => {
         const targetFaction = faction || state.faction || 'blue';
         const newResources = {
             ...state.resources,
@@ -93,7 +94,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             wood: newResources[localFaction].wood
         };
     }),
-    deductGold: (amount: number, faction?: 'blue' | 'red') => set((state: any) => {
+    deductGold: (amount: number, faction?: 'blue' | 'red') => set((state) => {
         const targetFaction = faction || state.faction || 'blue';
         const newResources = {
             ...state.resources,
@@ -108,7 +109,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             gold: newResources[localFaction].gold
         };
     }),
-    addFactionWood: (faction: 'blue' | 'red', amount: number) => set((state: any) => {
+    addFactionWood: (faction: 'blue' | 'red', amount: number) => set((state) => {
         const newResources = {
             ...state.resources,
             [faction]: {
@@ -122,7 +123,7 @@ export const createResourceSlice: StateCreator<ResourceSlice> = (set) => ({
             wood: newResources[localFaction].wood
         };
     }),
-    addFactionGold: (faction: 'blue' | 'red', amount: number) => set((state: any) => {
+    addFactionGold: (faction: 'blue' | 'red', amount: number) => set((state) => {
         const newResources = {
             ...state.resources,
             [faction]: {

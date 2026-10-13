@@ -11,6 +11,7 @@ import { BuildingEntity } from '../entities/BuildingEntity';
 import { GoldHut } from '../entities/GoldHut';
 import { Barracks } from '../entities/Barracks';
 import { useGameStore } from '../../store/useGameStore';
+import { EventBus } from '../EventBus';
 
 // Building definitions for ghost creation
 const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number; goldCost?: number; scale?: number }> = {
@@ -37,6 +38,7 @@ export class InteractionManager {
     private ghostGridRow: number = -1;
     private ghostValid: boolean = false;
     private pointerDown: boolean = false;
+    private unsubscribeStore: (() => void) | null = null;
 
     constructor(scene: Scene, entityManager: EntityManager, gridManager: GridManager) {
         this.scene = scene;
@@ -58,28 +60,68 @@ export class InteractionManager {
             this.handleResourceCollected(worker);
         });
 
+        // Quick sidebar select events
+        EventBus.off('select_idle_warrior');
+        EventBus.on('select_idle_warrior', () => {
+            const store = useGameStore.getState();
+            const faction = store.faction || 'blue';
+            const warrior = this.entityManager.units.find(u => u instanceof Warrior && u.faction === faction && u.active);
+            if (warrior) {
+                this.selectUnit(warrior);
+                this.scene.cameras.main.pan(warrior.x, warrior.y, 300);
+            }
+        });
+
+        EventBus.off('select_idle_worker');
+        EventBus.on('select_idle_worker', () => {
+            const store = useGameStore.getState();
+            const faction = store.faction || 'blue';
+            const worker = this.entityManager.units.find(u => u instanceof Worker && u.faction === faction && u.workerState === 'IDLE' && u.active)
+                         || this.entityManager.units.find(u => u instanceof Worker && u.faction === faction && u.active);
+            if (worker) {
+                this.selectUnit(worker);
+                this.scene.cameras.main.pan(worker.x, worker.y, 300);
+            }
+        });
+
         this.setupInput();
-        this.pollBuildModeFromStore();
+        this.setupStoreSubscriptions();
     }
+
 
     // ══════════════════════════════════════════════════════════
     //  BUILD MODE — Ghost & Placement
     // ══════════════════════════════════════════════════════════
 
     /**
-     * Poll the Zustand store each frame to detect when React UI triggers build mode.
+     * Subscribe to Zustand store changes to reactively enter/exit build mode.
      */
-    private pollBuildModeFromStore() {
-        this.scene.events.on('update', () => {
-            const store = useGameStore.getState();
-            const placing = store.isPlacingBuilding;
-
-            if (placing && !this.isBuildMode) {
-                this.enterBuildMode(placing);
-            } else if (!placing && this.isBuildMode) {
-                this.exitBuildMode(false);
+    private setupStoreSubscriptions() {
+        let prevPlacing = useGameStore.getState().isPlacingBuilding;
+        this.unsubscribeStore = useGameStore.subscribe((state) => {
+            const placing = state.isPlacingBuilding;
+            if (placing !== prevPlacing) {
+                prevPlacing = placing;
+                if (placing && !this.isBuildMode) {
+                    this.enterBuildMode(placing);
+                } else if (!placing && this.isBuildMode) {
+                    this.exitBuildMode(false);
+                }
             }
         });
+
+        this.scene.events.once('shutdown', () => {
+            this.destroy();
+        });
+    }
+
+    public destroy() {
+        if (this.unsubscribeStore) {
+            this.unsubscribeStore();
+            this.unsubscribeStore = null;
+        }
+        EventBus.off('select_idle_warrior');
+        EventBus.off('select_idle_worker');
     }
 
     public enterBuildMode(buildingType: string) {
@@ -336,12 +378,34 @@ export class InteractionManager {
             }
         }
 
-        // Handle Building Selection
         const store = useGameStore.getState();
         const localFaction = store.faction || 'blue';
 
+        // 1. Hostile Attack Priority for Warrior
+        if (this.selectedUnit instanceof Warrior) {
+            const warrior = this.selectedUnit as Warrior;
+            if (hitUnit && hitUnit.faction !== localFaction) {
+                this.showHostileTapIndicator(hitUnit.gridX, hitUnit.gridY);
+                warrior.attackTarget(hitUnit);
+                return;
+            }
+            if (hitBuilding && hitBuilding.faction !== localFaction) {
+                this.showHostileTapIndicator(hitBuilding.gridX, hitBuilding.gridY);
+                warrior.attackTarget(hitBuilding);
+                return;
+            }
+        }
+
+        // 2. Unit Selection Priority (Friendly units)
+        if (hitUnit) {
+            if (hitUnit.faction === localFaction) {
+                this.selectUnit(hitUnit);
+            }
+            return;
+        }
+
+        // 3. Building Selection Priority (Friendly buildings)
         if (hitBuilding) {
-            // Faction Select Lock: Only allow selecting our own buildings
             if (hitBuilding.faction !== localFaction) {
                 return;
             }
@@ -362,15 +426,6 @@ export class InteractionManager {
             }
         }
 
-        // 2. Unit Selection Priority
-        if (hitUnit) {
-            // Faction Select Lock: Only allow selecting our own units
-            if (hitUnit.faction !== localFaction) {
-                return;
-            }
-            this.selectUnit(hitUnit);
-            return;
-        }
 
         // 3. Resource Interaction Priority
         if (hitResource && this.selectedUnit instanceof Worker) {
@@ -533,27 +588,26 @@ export class InteractionManager {
                 console.log("[Client Click] Ground clicked. Selected Unit:", this.selectedUnit?.id);
                 console.log("[Client Click] Room ID status:", roomId, "Faction:", faction);
 
-                if (!roomId || !this.selectedUnit) {
-                    console.warn("[Client Click] Aborted. Missing Room ID or no Unit selected.");
+                if (!this.selectedUnit) {
                     return;
                 }
 
                 // Execute local movement pathfinding
                 this.selectedUnit.moveToGrid(targetPos.col, targetPos.row);
 
-                // Dynamically ensure we use the scene's inherited socket
-                const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
+                // Dynamically ensure we use the scene's inherited socket if in a multiplayer room
+                if (roomId && roomId !== 'solo_skirmish') {
+                    const activeSocket = (this.scene as any).socket || this.scene.game.registry.get('socket');
 
-                if (activeSocket) {
-                    console.log(`[InteractionManager Sync] Actively emitting via aligned Socket ID: ${activeSocket.id}`);
-                    activeSocket.emit('client_unit_move', {
-                        roomId: String(roomId).trim(),
-                        entityId: this.selectedUnit.id,
-                        targetCol: targetPos.col,
-                        targetRow: targetPos.row
-                    });
-                } else {
-                    console.error("[InteractionManager Fatal] No valid socket instance found on scene or registry!");
+                    if (activeSocket) {
+                        console.log(`[InteractionManager Sync] Actively emitting via aligned Socket ID: ${activeSocket.id}`);
+                        activeSocket.emit('client_unit_move', {
+                            roomId: String(roomId).trim(),
+                            entityId: this.selectedUnit.id,
+                            targetCol: targetPos.col,
+                            targetRow: targetPos.row
+                        });
+                    }
                 }
             } else {
                 this.deselectUnit();
@@ -605,6 +659,30 @@ export class InteractionManager {
             }
         });
     }
+
+    private showHostileTapIndicator(col: number, row: number) {
+        const pixelPos = this.gridManager.getTileCenter(col, row);
+        
+        this.tapIndicator.clear();
+        this.tapIndicator.lineStyle(2, 0xef4444, 0.95);
+        this.tapIndicator.strokeCircle(pixelPos.x, pixelPos.y, 16);
+        this.tapIndicator.lineStyle(1.5, 0xdc2626, 0.8);
+        this.tapIndicator.strokeCircle(pixelPos.x, pixelPos.y, 8);
+        this.tapIndicator.fillStyle(0xef4444, 0.35);
+        this.tapIndicator.fillCircle(pixelPos.x, pixelPos.y, 5);
+
+        this.scene.tweens.add({
+            targets: this.tapIndicator,
+            alpha: 0,
+            duration: 600,
+            ease: 'Power2',
+            onComplete: () => {
+                this.tapIndicator.clear();
+                this.tapIndicator.setAlpha(1);
+            }
+        });
+    }
+
 
     /**
      * Handle resource collection: find nearest DROP-OFF building (isDropOff=true) to deposit.

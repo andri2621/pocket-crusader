@@ -141,10 +141,22 @@ export class EntityManager {
 
     public addUnit(unit: BaseUnit) {
         this.units.push(unit);
+        unit.once('death', (deadUnit: BaseUnit) => {
+            this.handleUnitDeath(deadUnit);
+        });
         if (unit instanceof Worker || unit instanceof Warrior) {
             this.recalculatePopulation();
         }
     }
+
+    private handleUnitDeath(deadUnit: BaseUnit) {
+        this.units = this.units.filter(u => u !== deadUnit && u.id !== deadUnit.id);
+        this.scene.events.emit('force_deselect_unit', deadUnit.id);
+        if (deadUnit instanceof Worker || deadUnit instanceof Warrior) {
+            this.recalculatePopulation();
+        }
+    }
+
 
     public spawnWarrior(col: number, row: number, faction: 'blue' | 'red', newEntityId: string): Warrior | undefined {
         try {
@@ -202,17 +214,40 @@ export class EntityManager {
 
     public addResource(resource: BaseResource) {
         this.resources.push(resource);
+        resource.once('depleted', (res: BaseResource) => {
+            this.handleResourceDepleted(res || resource);
+        });
+    }
+
+    public removeResource(resource: BaseResource) {
+        this.handleResourceDepleted(resource);
+    }
+
+    private handleResourceDepleted(resource: BaseResource) {
+        if (!resource) return;
+        this.gridManager.unblockTile(resource.gridX, resource.gridY);
+        this.resources = this.resources.filter(r => r !== resource && r.id !== resource.id);
+        for (const unit of this.units) {
+            if (unit instanceof Worker && unit.getTargetResource() === resource) {
+                unit.cancelGathering();
+                unit.setWorkerState('IDLE');
+            }
+        }
     }
 
     public update(time: number, delta: number) {
-        for (const unit of this.units) {
-            unit.update(time, delta);
+        for (const unit of [...this.units]) {
+            if (unit && unit.active) {
+                unit.update(time, delta);
+            }
         }
         for (const building of this.buildings) {
             building.update(time, delta);
         }
         for (const resource of this.resources) {
-            resource.update(time, delta);
+            if (resource && resource.active) {
+                resource.update(time, delta);
+            }
         }
 
         // Population spawn check (every 10s)
