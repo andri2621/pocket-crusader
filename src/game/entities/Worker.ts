@@ -229,7 +229,16 @@ export class Worker extends BaseUnit {
             delay: 2000, // GATHER_INTERVAL
             loop: true,
             callback: () => {
-                if (!this.targetResource) return;
+                const resource = this.targetResource;
+                if (!resource || !resource.active) {
+                    if (this.carriedAmount > 0) {
+                        this.collectResource();
+                    } else {
+                        this.cancelGathering();
+                        this.setWorkerState('IDLE');
+                    }
+                    return;
+                }
 
                 const store = useGameStore.getState();
                 // Faction Guard: Only apply local resource node damage and credits if this is OUR worker!
@@ -237,23 +246,31 @@ export class Worker extends BaseUnit {
                     return;
                 }
                 
+                // Cache resource attributes BEFORE takeDamage can synchronously trigger depletion and nullify targetResource
+                const yieldAmount = resource.yieldPerHit || 5;
+                const resourceType = (resource.resourceType || 'wood') as 'wood' | 'gold';
+                const resourceId = resource.id;
+
                 const damage = 1;
-                this.targetResource.takeDamage(damage);
-                this.carriedAmount += this.targetResource.yieldPerHit;
-                this.carriedResourceType = this.targetResource.resourceType as 'wood' | 'gold';
+                this.carriedAmount += yieldAmount;
+                this.carriedResourceType = resourceType;
                 
                 // Network Sync: Emit resource harvested if this is our worker
                 const activeSocket = this.scene.game.registry.get('socket');
                 if (activeSocket && store.roomId) {
                     activeSocket.emit('client_resource_harvested', {
                         roomId: String(store.roomId).trim(),
-                        resourceId: this.targetResource.id,
+                        resourceId: resourceId,
                         amountHarvested: damage
                     });
                 }
 
+                // Apply damage to resource node (may trigger 'depleted' event synchronously)
+                resource.takeDamage(damage);
+
                 // Stop gathering if resource depleted OR inventory full (e.g., 10 capacity)
-                if (this.targetResource.currentHealth <= 0 || this.carriedAmount >= 10) {
+                const isDepleted = !this.targetResource || resource.currentHealth <= 0 || !resource.active;
+                if (isDepleted || this.carriedAmount >= 10) {
                     this.collectResource();
                 }
             }
@@ -269,7 +286,7 @@ export class Worker extends BaseUnit {
         this.startGathering(resource);
     }
 
-    private collectResource(): void {
+    public collectResource(): void {
         if (this.gatherTimer) {
             this.gatherTimer.destroy();
             this.gatherTimer = null;

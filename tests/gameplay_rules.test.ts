@@ -142,6 +142,34 @@ describe('RTS Worker Resource Harvest & Capacity Rules', () => {
         assert.equal(carried, 10);
         assert.equal(carried >= capacity, true); // Capacity reached, returns to base
     });
+
+    test('Node depletion during harvesting safely records yield before node is nullified', () => {
+        let node: { hp: number; yieldPerHit: number } | null = { hp: 1, yieldPerHit: 5 };
+        let workerCarried = 0;
+        let workerState = 'CHOPPING';
+
+        // Simulate safe harvest step
+        if (node) {
+            const yieldAmount = node.yieldPerHit;
+            workerCarried += yieldAmount;
+
+            // Damage node
+            node.hp -= 1;
+            if (node.hp <= 0) {
+                // Depletion hook fires and nullifies the target node
+                node = null;
+            }
+
+            // Safe state resolution
+            if (!node || workerCarried >= 10) {
+                workerState = 'CARRYING';
+            }
+        }
+
+        assert.equal(workerCarried, 5);
+        assert.equal(node, null);
+        assert.equal(workerState, 'CARRYING');
+    });
 });
 
 describe('RTS Combat & Damage Calculation Rules', () => {

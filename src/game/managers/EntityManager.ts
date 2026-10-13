@@ -229,8 +229,12 @@ export class EntityManager {
         this.resources = this.resources.filter(r => r !== resource && r.id !== resource.id);
         for (const unit of this.units) {
             if (unit instanceof Worker && unit.getTargetResource() === resource) {
-                unit.cancelGathering();
-                unit.setWorkerState('IDLE');
+                if (unit.carriedAmount > 0) {
+                    unit.collectResource();
+                } else {
+                    unit.cancelGathering();
+                    unit.setWorkerState('IDLE');
+                }
             }
         }
     }

@@ -136,6 +136,9 @@ export class Warrior extends BaseUnit {
                 if (this.attackCooldown <= 0) {
                     this.attackCooldown = this.attackInterval;
                     this.targetEntity.takeDamage(this.attackDamage);
+                    if (!this.targetEntity || !this.targetEntity.active || this.targetEntity.currentHealth <= 0) {
+                        this.cancelAttack();
+                    }
                 }
             } else if (!this.isMoving) {
                 // If target moved out of range and we are not moving, re-pathfind to it
