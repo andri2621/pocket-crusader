@@ -4,18 +4,20 @@ import { UnitConfig } from '../../types/entity.types';
 import { WorkerState, GridPosition } from '../../types/game';
 import Phaser from 'phaser';
 
+import { BALANCE_CONFIG } from '../config/BalanceConfig';
+
 export class Warrior extends BaseUnit {
     public targetEntity: BaseEntity | null = null;
     public attackCooldown: number = 0;
-    public readonly attackInterval: number = 1200; // 1.2s per swing
-    public readonly attackDamage: number = 25;
+    public readonly attackInterval: number = BALANCE_CONFIG.units.warrior.attackInterval;
+    public readonly attackDamage: number = BALANCE_CONFIG.units.warrior.attackDamage;
 
     constructor(config: UnitConfig) {
         super(config);
         
-        this.maxHealth = 200;
-        this.currentHealth = 200;
-        this.speed = 130; // Slower but tougher than Workers
+        this.maxHealth = BALANCE_CONFIG.units.warrior.maxHealth;
+        this.currentHealth = BALANCE_CONFIG.units.warrior.maxHealth;
+        this.speed = BALANCE_CONFIG.units.warrior.speed; // Slower but tougher than Workers
 
         this.mainSprite.play(`${this.texturePrefix}-idle`);
         

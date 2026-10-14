@@ -1,52 +1,49 @@
 import test, { describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { BALANCE_CONFIG, AI_DIFFICULTIES } from '../src/game/config/BalanceConfig.ts';
+import { GREENVALE_CONFIG, getGreenvaleResources, getGreenvaleObstacles, getGreenvaleBridges } from '../src/game/map/GreenvaleMap.ts';
 
 describe('RTS Building Cost & Affordability Rules', () => {
-    const BUILDING_COSTS = {
-        house: { wood: 30, gold: 0 },
-        woodcutter_hut: { wood: 50, gold: 0 },
-        gold_hut: { wood: 50, gold: 0 },
-        barracks: { wood: 50, gold: 50 }
-    };
-
-    function canAfford(building: keyof typeof BUILDING_COSTS, wood: number, gold: number): boolean {
-        const cost = BUILDING_COSTS[building];
-        return wood >= cost.wood && gold >= cost.gold;
+    function canAfford(building: keyof typeof BALANCE_CONFIG.buildings, wood: number, gold: number): boolean {
+        const cost = BALANCE_CONFIG.buildings[building] as { wood: number; gold?: number };
+        return wood >= cost.wood && gold >= (cost.gold ?? 0);
     }
 
-    test('House costs 30 wood and 0 gold', () => {
-        assert.equal(canAfford('house', 30, 0), true);
-        assert.equal(canAfford('house', 29, 0), false);
+    test('House costs 40 wood and 0 gold', () => {
+        assert.equal(canAfford('house', 40, 0), true);
+        assert.equal(canAfford('house', 39, 0), false);
     });
 
-    test('Barracks requires 50 wood and 50 gold', () => {
-        assert.equal(canAfford('barracks', 50, 50), true);
-        assert.equal(canAfford('barracks', 50, 49), false);
-        assert.equal(canAfford('barracks', 49, 50), false);
+    test('Barracks requires 60 wood and 40 gold', () => {
+        assert.equal(canAfford('barracks', 60, 40), true);
+        assert.equal(canAfford('barracks', 60, 39), false);
+        assert.equal(canAfford('barracks', 59, 40), false);
     });
 
-    test('Huts cost 50 wood each', () => {
-        assert.equal(canAfford('woodcutter_hut', 50, 0), true);
-        assert.equal(canAfford('gold_hut', 50, 0), true);
-        assert.equal(canAfford('woodcutter_hut', 49, 100), false);
+    test('Huts cost 40 wood each', () => {
+        assert.equal(canAfford('woodcutter_hut', 40, 0), true);
+        assert.equal(canAfford('gold_hut', 40, 0), true);
+        assert.equal(canAfford('woodcutter_hut', 39, 100), false);
     });
 });
 
 describe('RTS Population Management Rules', () => {
     function calculateMaxPopulation(completedHouseCount: number): number {
-        const BASE_POPULATION = 5;
-        const POP_PER_HOUSE = 5;
-        return BASE_POPULATION + completedHouseCount * POP_PER_HOUSE;
+        const base = BALANCE_CONFIG.population.baseCap;
+        const perHouse = BALANCE_CONFIG.population.capPerHouse;
+        const max = BALANCE_CONFIG.population.maxCap;
+        return Math.min(base + completedHouseCount * perHouse, max);
     }
 
     test('Base population cap without houses is 5', () => {
         assert.equal(calculateMaxPopulation(0), 5);
     });
 
-    test('Each completed house adds 5 to max population', () => {
+    test('Each completed house adds 5 to max population up to max 30', () => {
         assert.equal(calculateMaxPopulation(1), 10);
         assert.equal(calculateMaxPopulation(2), 15);
         assert.equal(calculateMaxPopulation(5), 30);
+        assert.equal(calculateMaxPopulation(8), 30); // Clamped at 30
     });
  
     test('Stronghold spawns workers only when current < max', () => {
@@ -59,8 +56,9 @@ describe('RTS Population Management Rules', () => {
 
 describe('RTS Worker Drafting & Training Constraints', () => {
     function canDraftWorkerForTraining(gold: number, availableWorkers: number): boolean {
+        const trainCost = BALANCE_CONFIG.units.warrior.trainCostGold;
         // Must afford 20 gold and keep at least 1 worker active in the economy
-        return gold >= 20 && availableWorkers > 1;
+        return gold >= trainCost && availableWorkers > 1;
     }
 
     test('Drafting succeeds with sufficient gold and more than 1 available worker', () => {
@@ -78,10 +76,10 @@ describe('RTS Worker Drafting & Training Constraints', () => {
     });
 });
 
-describe('RTS Grid Coordinate Transformations', () => {
-    const TILE_SIZE = 64;
-    const GRID_COLS = 32;
-    const GRID_ROWS = 18;
+describe('RTS Grid Coordinate Transformations (96x64)', () => {
+    const TILE_SIZE = GREENVALE_CONFIG.tileSize;
+    const GRID_COLS = GREENVALE_CONFIG.cols;
+    const GRID_ROWS = GREENVALE_CONFIG.rows;
 
     function getTileCenter(col: number, row: number): { x: number; y: number } {
         return {
@@ -113,15 +111,15 @@ describe('RTS Grid Coordinate Transformations', () => {
 
     test('World to grid maps pixel coordinates to grid cells', () => {
         const cell = worldToGrid(100, 200);
-        assert.equal(cell.col, 1); // 100 / 64 = 1.5625 -> 1
-        assert.equal(cell.row, 3); // 200 / 64 = 3.125 -> 3
+        assert.equal(cell.col, 1);
+        assert.equal(cell.row, 3);
     });
 
-    test('Grid boundary validation respects 32x18 map size', () => {
+    test('Grid boundary validation respects 96x64 map size', () => {
         assert.equal(isValidGridPos(0, 0), true);
-        assert.equal(isValidGridPos(31, 17), true);
-        assert.equal(isValidGridPos(32, 17), false);
-        assert.equal(isValidGridPos(10, 18), false);
+        assert.equal(isValidGridPos(95, 63), true);
+        assert.equal(isValidGridPos(96, 63), false);
+        assert.equal(isValidGridPos(10, 64), false);
         assert.equal(isValidGridPos(-1, 5), false);
     });
 });
@@ -129,8 +127,8 @@ describe('RTS Grid Coordinate Transformations', () => {
 describe('RTS Worker Resource Harvest & Capacity Rules', () => {
     test('Worker carry capacity caps at 10 and triggers return', () => {
         let carried = 0;
-        const capacity = 10;
-        const yieldPerHit = 5;
+        const capacity = BALANCE_CONFIG.units.worker.carryCapacity;
+        const yieldPerHit = BALANCE_CONFIG.units.worker.harvestYield;
 
         // Hit 1
         carried += yieldPerHit;
@@ -140,7 +138,7 @@ describe('RTS Worker Resource Harvest & Capacity Rules', () => {
         // Hit 2
         carried += yieldPerHit;
         assert.equal(carried, 10);
-        assert.equal(carried >= capacity, true); // Capacity reached, returns to base
+        assert.equal(carried >= capacity, true);
     });
 
     test('Node depletion during harvesting safely records yield before node is nullified', () => {
@@ -148,19 +146,15 @@ describe('RTS Worker Resource Harvest & Capacity Rules', () => {
         let workerCarried = 0;
         let workerState = 'CHOPPING';
 
-        // Simulate safe harvest step
         if (node) {
             const yieldAmount = node.yieldPerHit;
             workerCarried += yieldAmount;
 
-            // Damage node
             node.hp -= 1;
             if (node.hp <= 0) {
-                // Depletion hook fires and nullifies the target node
                 node = null;
             }
 
-            // Safe state resolution
             if (!node || workerCarried >= 10) {
                 workerState = 'CARRYING';
             }
@@ -174,17 +168,17 @@ describe('RTS Worker Resource Harvest & Capacity Rules', () => {
 
 describe('RTS Combat & Damage Calculation Rules', () => {
     test('Warrior deals 25 damage per hit', () => {
-        let targetHp = 100;
-        const warriorDamage = 25;
+        let targetHp = BALANCE_CONFIG.units.warrior.maxHealth;
+        const warriorDamage = BALANCE_CONFIG.units.warrior.attackDamage;
         targetHp -= warriorDamage;
-        assert.equal(targetHp, 75);
+        assert.equal(targetHp, 95);
     });
 
-    test('King with 500 health takes 20 warrior hits to defeat', () => {
-        let kingHp = 500;
-        const warriorDamage = 25;
+    test('King with 600 health takes 24 warrior hits to defeat', () => {
+        let kingHp = BALANCE_CONFIG.units.king.maxHealth;
+        const warriorDamage = BALANCE_CONFIG.units.warrior.attackDamage;
         const hitsNeeded = kingHp / warriorDamage;
-        assert.equal(hitsNeeded, 20);
+        assert.equal(hitsNeeded, 24);
 
         for (let i = 0; i < hitsNeeded; i++) {
             kingHp -= warriorDamage;
@@ -196,11 +190,11 @@ describe('RTS Combat & Damage Calculation Rules', () => {
         const isMeleeRange = (c1: number, r1: number, c2: number, r2: number) => {
             return Math.max(Math.abs(c1 - c2), Math.abs(r1 - r2)) <= 1;
         };
-        assert.equal(isMeleeRange(5, 5, 5, 6), true); // North
-        assert.equal(isMeleeRange(5, 5, 6, 6), true); // North-East diagonal
-        assert.equal(isMeleeRange(5, 5, 4, 5), true); // West
-        assert.equal(isMeleeRange(5, 5, 5, 7), false); // 2 tiles away
-        assert.equal(isMeleeRange(5, 5, 7, 7), false); // 2 tiles diagonal
+        assert.equal(isMeleeRange(5, 5, 5, 6), true);
+        assert.equal(isMeleeRange(5, 5, 6, 6), true);
+        assert.equal(isMeleeRange(5, 5, 4, 5), true);
+        assert.equal(isMeleeRange(5, 5, 5, 7), false);
+        assert.equal(isMeleeRange(5, 5, 7, 7), false);
     });
 
     test('King death determines victory vs defeat based on player faction', () => {
@@ -224,32 +218,91 @@ describe('RTS Store Faction Resource Isolation & Normalization Rules', () => {
 
     function createInitialState(): { blue: FactionRes; red: FactionRes } {
         return {
-            blue: { wood: 300, gold: 300, currentPopulation: 0, maxPopulation: 5 },
-            red: { wood: 300, gold: 300, currentPopulation: 0, maxPopulation: 5 }
+            blue: { wood: 100, gold: 60, currentPopulation: 0, maxPopulation: 5 },
+            red: { wood: 100, gold: 60, currentPopulation: 0, maxPopulation: 5 }
         };
     }
 
     test('Adding resources to one faction does not leak into the other faction', () => {
         const state = createInitialState();
-        // Red AI gathers 10 wood
         state.red.wood += 10;
-        assert.equal(state.red.wood, 310);
-        assert.equal(state.blue.wood, 300); // Blue remains unchanged
+        assert.equal(state.red.wood, 110);
+        assert.equal(state.blue.wood, 100);
     });
 
     test('Deducting resources clamps at 0 and does not go negative', () => {
         const state = createInitialState();
-        // Player attempts to build 10 houses costing 300 wood, then another house
-        state.blue.wood = Math.max(0, state.blue.wood - 350);
+        state.blue.wood = Math.max(0, state.blue.wood - 150);
         assert.equal(state.blue.wood, 0);
     });
 
     test('Faction population updates preserve per-faction limits', () => {
         const state = createInitialState();
-        state.blue.maxPopulation = 15; // 2 houses built
-        state.red.maxPopulation = 10;  // 1 house built
+        state.blue.maxPopulation = 15;
+        state.red.maxPopulation = 10;
         assert.equal(state.blue.maxPopulation, 15);
         assert.equal(state.red.maxPopulation, 10);
     });
 });
 
+describe('Skirmish AI Difficulty Profiles & Wave Pacing Rules', () => {
+    test('Easy difficulty delays first assault to >= 3.5 minutes and requires >= 4 warriors', () => {
+        const easy = AI_DIFFICULTIES.easy;
+        assert.equal(easy.firstAttackDelayMs, 210000);
+        assert.equal(easy.minAttackArmySize, 4);
+        assert.equal(easy.tickInterval, 2500);
+    });
+
+    test('Normal difficulty balances aggression to 2.5 minutes and 3 warriors', () => {
+        const normal = AI_DIFFICULTIES.normal;
+        assert.equal(normal.firstAttackDelayMs, 150000);
+        assert.equal(normal.minAttackArmySize, 3);
+    });
+
+    test('Hard difficulty enforces faster military ramp up with 1.5 min delay and 2 warriors', () => {
+        const hard = AI_DIFFICULTIES.hard;
+        assert.equal(hard.firstAttackDelayMs, 90000);
+        assert.equal(hard.minAttackArmySize, 2);
+    });
+});
+
+describe('Greenvale Frontier Map Symmetry & Strategic Balancing', () => {
+    test('Blue and Red starting base resources are strictly symmetrical in quantity', () => {
+        const resources = getGreenvaleResources();
+        
+        // Count trees near Blue base (cols 5..20) vs Red base (cols 75..90)
+        const blueTrees = resources.filter(r => r.type === 'wood' && r.col >= 5 && r.col <= 20).length;
+        const redTrees = resources.filter(r => r.type === 'wood' && r.col >= 75 && r.col <= 90).length;
+        assert.equal(blueTrees, 14);
+        assert.equal(redTrees, 14);
+
+        // Count gold rocks near Blue base vs Red base
+        const blueGold = resources.filter(r => r.type === 'gold' && r.col >= 5 && r.col <= 20).length;
+        const redGold = resources.filter(r => r.type === 'gold' && r.col >= 75 && r.col <= 90).length;
+        assert.equal(blueGold, 4);
+        assert.equal(redGold, 4);
+    });
+
+    test('Central river divide and chokepoints allow strategic river crossing via wooden bridges', () => {
+        const obstacles = getGreenvaleObstacles();
+        assert.ok(obstacles.length > 20);
+        
+        // Both North and South crossings feature functional wooden bridges
+        const bridges = getGreenvaleBridges();
+        assert.ok(bridges.length >= 12);
+
+        // North bridge tiles (rows 16-18) must NOT be in obstacles (walkable across river)
+        const northBridgeTiles = bridges.filter(b => b.row >= 16 && b.row <= 18);
+        for (const nb of northBridgeTiles) {
+            const isBlocked = obstacles.some(o => o.col === nb.col && o.row === nb.row);
+            assert.equal(isBlocked, false, `North Bridge at (${nb.col}, ${nb.row}) must remain walkable`);
+        }
+
+        // South bridge tiles (rows 46-48) must NOT be in obstacles (walkable across river)
+        const southBridgeTiles = bridges.filter(b => b.row >= 46 && b.row <= 48);
+        for (const sb of southBridgeTiles) {
+            const isBlocked = obstacles.some(o => o.col === sb.col && o.row === sb.row);
+            assert.equal(isBlocked, false, `South Bridge at (${sb.col}, ${sb.row}) must remain walkable`);
+        }
+    });
+});

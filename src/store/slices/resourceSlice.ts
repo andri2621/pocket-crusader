@@ -27,12 +27,12 @@ export interface ResourceSlice {
 }
 
 export const createResourceSlice: StateCreator<GameStore, [], [], ResourceSlice> = (set) => ({
-    wood: 300,
-    gold: 300,
+    wood: 100,
+    gold: 60,
     resources: {
         blue: {
-            wood: 300,
-            gold: 300,
+            wood: 100,
+            gold: 60,
             currentPopulation: 0,
             maxPopulation: 5,
             availableWorkersCount: 0,
@@ -40,8 +40,8 @@ export const createResourceSlice: StateCreator<GameStore, [], [], ResourceSlice>
             warriorCount: 0
         },
         red: {
-            wood: 300,
-            gold: 300,
+            wood: 100,
+            gold: 60,
             currentPopulation: 0,
             maxPopulation: 5,
             availableWorkersCount: 0,

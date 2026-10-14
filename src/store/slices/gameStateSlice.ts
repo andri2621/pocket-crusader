@@ -11,6 +11,10 @@ export interface GameStateSlice {
     workerCount: number;
     warriorCount: number;
     
+    // Difficulty State
+    difficulty: 'easy' | 'normal' | 'hard';
+    setDifficulty: (difficulty: 'easy' | 'normal' | 'hard') => void;
+
     // Multiplayer State
     roomId: string | null;
     isHost: boolean;
@@ -26,6 +30,9 @@ export const createGameStateSlice: StateCreator<GameStore, [], [], GameStateSlic
     gameResult: null,
     setGameOver: (isOver: boolean, result: 'victory' | 'defeat' | null = null) => 
         set({ isGameOver: isOver, gameResult: result }),
+
+    difficulty: 'easy',
+    setDifficulty: (difficulty: 'easy' | 'normal' | 'hard') => set({ difficulty }),
 
     currentPopulation: 0,
     maxPopulation: 5,

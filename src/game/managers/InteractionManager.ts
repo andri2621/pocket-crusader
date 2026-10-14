@@ -13,12 +13,14 @@ import { Barracks } from '../entities/Barracks';
 import { useGameStore } from '../../store/useGameStore';
 import { EventBus } from '../EventBus';
 
+import { BALANCE_CONFIG } from '../config/BalanceConfig';
+
 // Building definitions for ghost creation
 const BUILDING_DEFS: Record<string, { texture: string; width: number; height: number; cost: number; goldCost?: number; scale?: number }> = {
-    house: { texture: 'house1', width: 2, height: 2, cost: 30 },
-    woodcutter_hut: { texture: 'hut', width: 1, height: 1, cost: 50, scale: 0.6 },
-    gold_hut: { texture: 'gold_hut', width: 1, height: 1, cost: 50, scale: 0.6 },
-    barracks: { texture: 'barracks', width: 2, height: 2, cost: 50, goldCost: 50, scale: 0.76 },
+    house: { texture: 'house1', width: BALANCE_CONFIG.buildings.house.footprintWidth, height: BALANCE_CONFIG.buildings.house.footprintHeight, cost: BALANCE_CONFIG.buildings.house.wood },
+    woodcutter_hut: { texture: 'hut', width: BALANCE_CONFIG.buildings.woodcutter_hut.footprintWidth, height: BALANCE_CONFIG.buildings.woodcutter_hut.footprintHeight, cost: BALANCE_CONFIG.buildings.woodcutter_hut.wood, scale: 0.6 },
+    gold_hut: { texture: 'gold_hut', width: BALANCE_CONFIG.buildings.gold_hut.footprintWidth, height: BALANCE_CONFIG.buildings.gold_hut.footprintHeight, cost: BALANCE_CONFIG.buildings.gold_hut.wood, scale: 0.6 },
+    barracks: { texture: 'barracks', width: BALANCE_CONFIG.buildings.barracks.footprintWidth, height: BALANCE_CONFIG.buildings.barracks.footprintHeight, cost: BALANCE_CONFIG.buildings.barracks.wood, goldCost: BALANCE_CONFIG.buildings.barracks.gold, scale: 0.76 },
 };
 
 export class InteractionManager {

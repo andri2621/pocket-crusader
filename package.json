@@ -27,7 +27,7 @@
     "start": "NODE_ENV=production node server.js",
     "dev-nolog": "node server.js",
     "build-nolog": "next build",
-    "test": "node --experimental-strip-types --test tests/gameplay_rules.test.ts"
+    "test": "node --experimental-strip-types --test tests/gameplay_rules.test.ts tests/map_generation.test.ts"
   },
   "dependencies": {
     "easystarjs": "^0.4.4",

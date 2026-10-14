@@ -50,6 +50,21 @@ export class Preloader extends Scene
             frameHeight: 64
         });
 
+        // Water base tile (solid cyan 64x64)
+        this.load.image('water_tile', 'Terrain/Tileset/Water Background color.png');
+
+        // Wooden Plank Bridge (3x3 tiles of 64x64 from WoodTable_Slots)
+        this.load.spritesheet('wood_bridge', 'UI Elements/UI Elements/Wood Table/WoodTable_Slots.png', {
+            frameWidth: 64,
+            frameHeight: 64
+        });
+
+        // Animated Water Foam
+        this.load.spritesheet('water_foam', 'Terrain/Tileset/Water Foam.png', {
+            frameWidth: 192,
+            frameHeight: 192
+        });
+
         // Tree spritesheet (192x256 per frame, 8 frames for idle sway)
         this.load.spritesheet('tree', 'Terrain/Resources/Wood/Trees/Tree1.png', {
             frameWidth: 192,
@@ -113,8 +128,12 @@ export class Preloader extends Scene
             this.load.spritesheet(`${prefix}-attack`, `Units/${color} Units/Warrior/Warrior_Attack1.png`, { frameWidth: 192, frameHeight: 192 });
         });
 
-        // ── Terrain Props ───────────────────────────────────
+        // ── Terrain Props & Decorations ──────────────────
         this.load.image('stump', 'Terrain/Resources/Wood/Trees/Stump 1.png');
+        this.load.spritesheet('dec_bush_1', 'Terrain/Decorations/Bushes/Bushe1.png', { frameWidth: 128, frameHeight: 128 });
+        this.load.spritesheet('dec_bush_2', 'Terrain/Decorations/Bushes/Bushe2.png', { frameWidth: 128, frameHeight: 128 });
+        this.load.image('dec_rock_1', 'Terrain/Decorations/Rocks/Rock1.png');
+        this.load.image('dec_rock_2', 'Terrain/Decorations/Rocks/Rock2.png');
         
         // ── Gold Stones ─────────────────────────────────────
         this.load.image('gold_stone_1', 'Terrain/Resources/Gold/Gold Stones/Gold Stone 1.png');

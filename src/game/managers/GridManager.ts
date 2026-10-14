@@ -1,10 +1,11 @@
 import { Scene } from 'phaser';
 import * as EasyStar from 'easystarjs';
 import { GridPosition } from '../../types/game';
+import { GREENVALE_CONFIG } from '../map/GreenvaleMap';
 
-export const TILE_SIZE = 64;
-export const GRID_COLS = 32;
-export const GRID_ROWS = 18;
+export const TILE_SIZE = GREENVALE_CONFIG.tileSize;
+export const GRID_COLS = GREENVALE_CONFIG.cols;
+export const GRID_ROWS = GREENVALE_CONFIG.rows;
 const TILE_WALKABLE = 0;
 const TILE_BLOCKED = 1;
 
@@ -32,7 +33,7 @@ export class GridManager {
         this.easystar.setAcceptableTiles([TILE_WALKABLE]);
         this.easystar.enableDiagonals();
         this.easystar.disableCornerCutting();
-        this.easystar.setIterationsPerCalculation(1000);
+        this.easystar.setIterationsPerCalculation(4000);
     }
 
     public update() {

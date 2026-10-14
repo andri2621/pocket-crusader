@@ -10,6 +10,7 @@ import { King } from '../entities/King';
 import { Warrior } from '../entities/Warrior';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { EventBus } from '../EventBus';
+import { BALANCE_CONFIG, AI_DIFFICULTIES } from '../config/BalanceConfig';
 
 export class EntityManager {
     private scene: Scene;
@@ -18,7 +19,7 @@ export class EntityManager {
     public buildings: BaseBuilding[] = [];
     public resources: BaseResource[] = [];
     
-    private spawnTimer: number = 0;
+    private spawnTimers: Record<'blue' | 'red', number> = { blue: 0, red: 0 };
     private assignTimer: number = 0;
 
     constructor(scene: Scene, gridManager: GridManager) {
@@ -254,26 +255,35 @@ export class EntityManager {
             }
         }
 
-        // Population spawn check (every 10s)
+        // Population spawn check for both factions
         const store = useGameStore.getState();
-        const localFaction = store.faction || 'blue';
-        const localResources = store.resources[localFaction];
+        const factions: ('blue' | 'red')[] = ['blue', 'red'];
+        const difficulty = store.difficulty || 'easy';
+        const aiDifficulty = AI_DIFFICULTIES[difficulty];
 
-        if (localResources.currentPopulation < localResources.maxPopulation) {
-            this.spawnTimer += delta;
-            if (this.spawnTimer >= 10000) {
-                this.spawnTimer = 0;
-                this.checkPopulationAndSpawn();
+        for (const f of factions) {
+            const fResources = store.resources[f];
+            const isLocal = f === (store.faction || 'blue');
+            const spawnInterval = isLocal 
+                ? BALANCE_CONFIG.population.playerSpawnInterval 
+                : aiDifficulty.spawnInterval;
+
+            if (fResources && fResources.currentPopulation < fResources.maxPopulation) {
+                this.spawnTimers[f] += delta;
+                if (this.spawnTimers[f] >= spawnInterval) {
+                    this.spawnTimers[f] = 0;
+                    this.checkPopulationAndSpawn(f);
+                }
+            } else {
+                this.spawnTimers[f] = 0; // Reset timer if pop is capped
             }
-        } else {
-            this.spawnTimer = 0; // Reset timer if pop is capped
-        }
 
-        // Sync Spawn Timer to Stronghold
-        const stronghold = this.buildings.find(b => b.buildingType === 'stronghold' && b.faction === localFaction) as any;
-        if (stronghold && stronghold.updateSpawnBar) {
-            const isSpawning = localResources.currentPopulation < localResources.maxPopulation;
-            stronghold.updateSpawnBar(isSpawning ? this.spawnTimer / 10000 : 0, isSpawning);
+            // Sync Spawn Timer to Stronghold
+            const stronghold = this.buildings.find(b => b.buildingType === 'stronghold' && b.faction === f) as any;
+            if (stronghold && stronghold.updateSpawnBar) {
+                const isSpawning = fResources && fResources.currentPopulation < fResources.maxPopulation;
+                stronghold.updateSpawnBar(isSpawning ? this.spawnTimers[f] / spawnInterval : 0, isSpawning);
+            }
         }
 
         // Auto-assign idle workers to unfinished buildings (every 2s)
@@ -323,16 +333,16 @@ export class EntityManager {
         return localResult;
     }
 
-    private checkPopulationAndSpawn() {
+    private checkPopulationAndSpawn(targetFaction?: 'blue' | 'red') {
         // Recalculate population to update store
         this.recalculatePopulation();
         
         const store = useGameStore.getState();
-        const faction = store.faction || 'blue';
+        const faction = targetFaction || store.faction || 'blue';
         const factionData = store.resources[faction];
 
-        if (factionData.currentPopulation < factionData.maxPopulation) {
-            // Find a stronghold matching our OWN faction!
+        if (factionData && factionData.currentPopulation < factionData.maxPopulation) {
+            // Find a stronghold matching our target faction!
             const stronghold = this.buildings.find(b => b.buildingType === 'stronghold' && b.faction === faction);
             if (stronghold) {
                 // Anti-stacking: Find a random walkable tile near the stronghold (radius 2)
@@ -357,7 +367,7 @@ export class EntityManager {
 
                 // Multiplayer Spawn Unit Sync
                 const activeSocket = this.scene.game.registry.get('socket');
-                if (activeSocket && store.roomId) {
+                if (activeSocket && store.roomId && faction === store.faction) {
                     console.log(`[Spawn Sync] Syncing spawn of ${entityId} at [Col:${spawnTile.col}, Row:${spawnTile.row}]`);
                     activeSocket.emit('client_spawn_unit', {
                         roomId: String(store.roomId).trim(),

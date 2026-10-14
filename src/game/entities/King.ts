@@ -2,14 +2,15 @@ import { BaseUnit } from './base/BaseUnit';
 import { UnitConfig } from '../../types/entity.types';
 import { WorkerState } from '../../types/game';
 import { useGameStore } from '../../store/useGameStore';
+import { BALANCE_CONFIG } from '../config/BalanceConfig';
 import Phaser from 'phaser';
 
 export class King extends BaseUnit {
     constructor(config: UnitConfig) {
         super(config);
         
-        this.maxHealth = 500;
-        this.currentHealth = 500;
+        this.maxHealth = BALANCE_CONFIG.units.king.maxHealth;
+        this.currentHealth = BALANCE_CONFIG.units.king.maxHealth;
 
         // Scale up the king and add golden tint
         this.mainSprite.setScale(1.3);

@@ -4,6 +4,7 @@ import { useGameStore } from "./store/useGameStore";
 import styles from "./styles/App.module.css";
 import { EventBus } from "./game/EventBus";
 import { socket } from "./network/socketClient";
+import { BALANCE_CONFIG, AI_DIFFICULTIES } from "./game/config/BalanceConfig";
 
 function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
     const isOpen = useGameStore((s) => s.isBuildMenuOpen);
@@ -12,46 +13,87 @@ function BuildMenu({ wood, gold }: { wood: number, gold: number }) {
 
     if (!isOpen) return null;
 
-    const canAffordHut = wood >= 50;
-    const canAffordHouse = wood >= 30;
-    const canAffordBarracks = wood >= 50 && gold >= 50;
+    const houseWood = BALANCE_CONFIG.buildings.house.wood;
+    const hutWood = BALANCE_CONFIG.buildings.woodcutter_hut.wood;
+    const barracksWood = BALANCE_CONFIG.buildings.barracks.wood;
+    const barracksGold = BALANCE_CONFIG.buildings.barracks.gold;
+
+    const canAffordHouse = wood >= houseWood;
+    const canAffordWoodHut = wood >= hutWood;
+    const canAffordGoldHut = wood >= hutWood;
+    const canAffordBarracks = wood >= barracksWood && gold >= barracksGold;
 
     return (
         <div className={styles.buildMenuOverlay} onClick={toggleMenu}>
             <div className={styles.buildMenuPanel} onClick={(e) => e.stopPropagation()}>
-                <h3 className={styles.buildMenuTitle}>Build</h3>
-                <div className={styles.buildCardList}>
+                <div className={styles.buildMenuHeader}>
+                    <h3 className={styles.buildMenuTitle}>Build Structure</h3>
+                    <button className={styles.closeBtn} onClick={toggleMenu} title="Close" />
+                </div>
+                
+                <div className={styles.buildCardGrid}>
+                    {/* House Card */}
                     <button
                         className={`${styles.buildCard} ${!canAffordHouse ? styles.buildCardDisabled : ''}`}
                         disabled={!canAffordHouse}
                         onClick={() => { if (canAffordHouse) setPlacing('house'); }}
                     >
-                        <span className={styles.buildCardLabel}>House</span>
-                        <span className={styles.buildCardCost}>🪵 30</span>
+                        <span className={styles.buildCardLabel}>House (+5 Pop)</span>
+                        <div className={styles.buildCardCostRow}>
+                            <span className={styles.costPill}>
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.costIcon} />
+                                {houseWood}
+                            </span>
+                        </div>
                     </button>
+
+                    {/* Woodcutter Hut */}
                     <button
-                        className={`${styles.buildCard} ${!canAffordHut ? styles.buildCardDisabled : ''}`}
-                        disabled={!canAffordHut}
-                        onClick={() => { if (canAffordHut) setPlacing('woodcutter_hut'); }}
+                        className={`${styles.buildCard} ${!canAffordWoodHut ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordWoodHut}
+                        onClick={() => { if (canAffordWoodHut) setPlacing('woodcutter_hut'); }}
                     >
-                        <span className={styles.buildCardLabel}>Woodcutter&apos;s Hut</span>
-                        <span className={styles.buildCardCost}>🪵 50</span>
+                        <span className={styles.buildCardLabel}>Woodcutter Hut</span>
+                        <div className={styles.buildCardCostRow}>
+                            <span className={styles.costPill}>
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.costIcon} />
+                                {hutWood}
+                            </span>
+                        </div>
                     </button>
+
+                    {/* Gold Hut */}
                     <button
-                        className={`${styles.buildCard} ${!canAffordHut ? styles.buildCardDisabled : ''}`}
-                        disabled={!canAffordHut}
-                        onClick={() => { if (canAffordHut) setPlacing('gold_hut'); }}
+                        className={`${styles.buildCard} ${!canAffordGoldHut ? styles.buildCardDisabled : ''}`}
+                        disabled={!canAffordGoldHut}
+                        onClick={() => { if (canAffordGoldHut) setPlacing('gold_hut'); }}
                     >
                         <span className={styles.buildCardLabel}>Gold Hut</span>
-                        <span className={styles.buildCardCost}>🪵 50</span>
+                        <div className={styles.buildCardCostRow}>
+                            <span className={styles.costPill}>
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.costIcon} />
+                                {hutWood}
+                            </span>
+                        </div>
                     </button>
+
+                    {/* Barracks */}
                     <button
                         className={`${styles.buildCard} ${!canAffordBarracks ? styles.buildCardDisabled : ''}`}
                         disabled={!canAffordBarracks}
                         onClick={() => { if (canAffordBarracks) setPlacing('barracks'); }}
                     >
                         <span className={styles.buildCardLabel}>Barracks</span>
-                        <span className={styles.buildCardCost}>🪵 50 💰 50</span>
+                        <div className={styles.buildCardCostRow}>
+                            <span className={styles.costPill}>
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.costIcon} />
+                                {barracksWood}
+                            </span>
+                            <span className={styles.costPill}>
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.costIcon} />
+                                {barracksGold}
+                            </span>
+                        </div>
                     </button>
                 </div>
             </div>
@@ -66,12 +108,38 @@ function SelectionPanel() {
     const selectedUnitType = useGameStore((s) => s.selectedUnitType);
     const trainingQueue = useGameStore((s) => s.trainingQueue);
     const trainingProgress = useGameStore((s) => s.trainingProgress);
-    const faction = useGameStore((s) => s.faction);
     const resources = useGameStore((s) => s.resources[s.faction] || s.resources['blue']);
     const gold = resources.gold;
     const availableWorkers = resources.availableWorkersCount;
 
-    // ── Warrior Disband Panel ──
+    // ── 1. Worker Selected Panel ──
+    if (selectedUnitType === 'worker' && selectedUnitId) {
+        return (
+            <div className={styles.selectionPanel}>
+                <div className={styles.selectionContent}>
+                    <div className={styles.portraitContainer}>
+                        <img 
+                            src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" 
+                            className={styles.portraitImage} 
+                            alt="Worker" 
+                        />
+                    </div>
+                    <div className={styles.selectionInfo}>
+                        <h3 className={styles.selectionTitle}>Pawn (Worker)</h3>
+                        <div className={styles.selectionStats}>Health: 50 | Carry: 10</div>
+                        <button 
+                            className={`${styles.actionBtn} ${styles.actionBtnDanger}`} 
+                            onClick={() => EventBus.emit('force_deselect_unit', selectedUnitId)}
+                        >
+                            Deselect
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── 2. Warrior Selected Panel ──
     if (selectedUnitType === 'warrior' && selectedUnitId) {
         const handleDisband = () => {
             EventBus.emit('disband_warrior', selectedUnitId);
@@ -81,119 +149,72 @@ function SelectionPanel() {
             <div className={styles.selectionPanel}>
                 <div className={styles.selectionContent}>
                     <div className={styles.portraitContainer}>
-                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" className={styles.portraitImage} alt="Warrior" />
+                        <img 
+                            src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" 
+                            className={styles.portraitImage} 
+                            alt="Warrior" 
+                        />
                     </div>
                     <div className={styles.selectionInfo}>
                         <h3 className={styles.selectionTitle}>Warrior</h3>
-                        <div className={styles.selectionActions}>
-                            <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={handleDisband}>
-                                Disband
-                            </button>
-                        </div>
+                        <div className={styles.selectionStats}>HP: 120 | Dmg: 25 / 1.2s</div>
+                        <button className={`${styles.actionBtn} ${styles.actionBtnDanger}`} onClick={handleDisband}>
+                            Disband
+                        </button>
                     </div>
                 </div>
             </div>
         );
     }
 
-    // ── Barracks Panel ──
-    if (!selectedBuildingId) return null;
+    // ── 3. Barracks Selected Panel ──
+    if (selectedBuildingType === 'barracks' && selectedBuildingId) {
+        const trainCost = BALANCE_CONFIG.units.warrior.trainCostGold;
+        const canTrain = gold >= trainCost && availableWorkers > 1;
+        const safetyWarning = availableWorkers <= 1 && gold >= trainCost;
 
-    const handleTrainWarrior = () => {
-        // Safety Net: Must keep at least 1 worker in the economy
-        if (gold >= 20 && availableWorkers > 1) {
-            useGameStore.getState().addGold(-20);
-            EventBus.emit('train_warrior', selectedBuildingId);
-        }
-    };
-
-    const handleCancelTraining = (index: number) => {
-        EventBus.emit('cancel_training', { id: selectedBuildingId, index });
-    };
-
-    // Calculate circumference for SVG circle (r=22, c=2*pi*r)
-    const radius = 22;
-    const circumference = 2 * Math.PI * radius;
-    const strokeDashoffset = circumference - (trainingProgress * circumference);
-
-    // Safety net: disable if only 1 worker left or no gold
-    const canTrain = gold >= 20 && availableWorkers > 1;
-    const safetyWarning = availableWorkers <= 1 && gold >= 20;
-
-    if (selectedBuildingType === 'barracks') {
-        const warriorCount = trainingQueue.filter(u => u === 'warrior').length;
+        const handleTrainWarrior = () => {
+            if (canTrain) {
+                useGameStore.getState().addGold(-trainCost);
+                EventBus.emit('train_warrior', selectedBuildingId);
+            }
+        };
 
         return (
             <div className={styles.selectionPanel}>
                 <div className={styles.selectionContent}>
-                    {/* Portrait & Progress */}
                     <div className={styles.portraitContainer}>
-                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" className={styles.portraitImage} alt="Warrior" />
+                        <img 
+                            src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" 
+                            className={styles.portraitImage} 
+                            alt="Barracks" 
+                        />
                         {trainingQueue.length > 0 && (
-                            <svg className={styles.progressRing} width="52" height="52">
-                                <circle
-                                    stroke="rgba(0,0,0,0.3)"
-                                    strokeWidth="4"
-                                    fill="transparent"
-                                    r={radius}
-                                    cx="26"
-                                    cy="26"
-                                />
-                                <circle
-                                    stroke="#00aaff"
-                                    strokeWidth="4"
-                                    fill="transparent"
-                                    r={radius}
-                                    cx="26"
-                                    cy="26"
-                                    style={{
-                                        strokeDasharray: `${circumference} ${circumference}`,
-                                        strokeDashoffset: strokeDashoffset,
-                                        transform: 'rotate(-90deg)',
-                                        transformOrigin: '50% 50%',
-                                        transition: 'stroke-dashoffset 0.1s linear'
-                                    }}
-                                />
-                            </svg>
-                        )}
-                        {warriorCount > 1 && (
-                            <div className={styles.stackBadge}>x{warriorCount}</div>
+                            <div className={styles.stackBadge}>x{trainingQueue.length}</div>
                         )}
                     </div>
-
-                    {/* Actions & Info */}
                     <div className={styles.selectionInfo}>
                         <h3 className={styles.selectionTitle}>Barracks</h3>
-                        <div className={styles.selectionActions}>
-                            <button 
-                                className={`${styles.actionBtn} ${!canTrain ? styles.actionBtnDisabled : ''}`}
-                                disabled={!canTrain}
-                                onClick={handleTrainWarrior}
-                            >
-                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/sword.png" alt="Train" className={styles.btnIconImg} />
-                                Train 
-                                <span className={styles.btnCost}>(20 <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.btnIconSmallImg} />)</span>
-                            </button>
-                        </div>
+                        <button 
+                            className={`${styles.actionBtn} ${!canTrain ? styles.actionBtnDisabled : ''}`}
+                            disabled={!canTrain}
+                            onClick={handleTrainWarrior}
+                        >
+                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/sword.png" alt="Train" className={styles.hudIconImg} style={{ width: 18, height: 18 }} />
+                            Train Warrior ({trainCost}g)
+                        </button>
+                        {trainingQueue.length > 0 && (
+                            <div className={styles.trainingBarContainer}>
+                                <div 
+                                    className={styles.trainingBarFill} 
+                                    style={{ width: `${Math.round(trainingProgress * 100)}%` }} 
+                                />
+                            </div>
+                        )}
                         {safetyWarning && (
-                            <div className={styles.safetyWarning}>Need at least 1 worker for economy</div>
+                            <div className={styles.safetyWarning}>Need 1 worker active for economy</div>
                         )}
                     </div>
-
-                    {/* Queue Strip */}
-                    {trainingQueue.length > 0 && (
-                        <div className={styles.queueStrip}>
-                            <div className={styles.queueLabel}>Queue</div>
-                            <div className={styles.queueList}>
-                                {trainingQueue.map((unit, idx) => (
-                                    <div key={idx} className={styles.queueItem} onClick={() => handleCancelTraining(idx)}>
-                                        <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt={unit} />
-                                        <div className={styles.queueItemCancel}>✕</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         );
@@ -205,7 +226,6 @@ function SelectionPanel() {
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [hasStarted, setHasStarted] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(true);
     const faction = useGameStore((state) => state.faction);
     const resources = useGameStore((state) => state.resources[state.faction] || state.resources['blue']);
     const wood = resources.wood;
@@ -217,6 +237,8 @@ function App() {
     const isPlacing = useGameStore((state) => state.isPlacingBuilding);
     const isGameOver = useGameStore((state) => state.isGameOver);
     const gameResult = useGameStore((state) => state.gameResult);
+    const difficulty = useGameStore((state) => state.difficulty || 'easy');
+    const setDifficulty = useGameStore((state) => state.setDifficulty);
     const setMultiplayerState = useGameStore((state) => state.setMultiplayerState);
 
     const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
@@ -224,7 +246,6 @@ function App() {
     const [createdRoomId, setCreatedRoomId] = useState<string | null>(null);
 
     useEffect(() => {
-        // Initialize Socket.IO only once on the client
         if (!socket.connected) {
             socket.connect();
             
@@ -234,7 +255,7 @@ function App() {
 
             socket.on('room_created', (data: { roomId: string, faction: 'blue' | 'red', isHost: boolean }) => {
                 setCreatedRoomId(data.roomId);
-                setLobbyStatus('Waiting for another player...');
+                setLobbyStatus('Waiting for opponent to join...');
                 setMultiplayerState(data.roomId, data.isHost, data.faction);
             });
 
@@ -244,10 +265,8 @@ function App() {
             });
 
             socket.on('room_ready', (data: { roomId: string, players: any[] }) => {
-                setLobbyStatus('Room is ready! Starting game...');
+                setLobbyStatus('Match Ready! Launching...');
                 setHasStarted(true);
-                setIsFullscreen(true);
-                requestFullscreenAndLock().catch(() => {});
             });
 
             socket.on('room_error', (data: { message: string }) => {
@@ -255,10 +274,6 @@ function App() {
                 setCreatedRoomId(null);
             });
         }
-        
-        return () => {
-            // Clean up on unmount if needed, but we usually want to keep it alive
-        };
     }, []);
 
     const generateRandomRoomCode = () => {
@@ -273,8 +288,6 @@ function App() {
     const handleStartSoloSkirmish = () => {
         setMultiplayerState('solo_skirmish', true, 'blue');
         setHasStarted(true);
-        setIsFullscreen(true);
-        requestFullscreenAndLock().catch(() => {});
     };
 
     const handleCreateRoom = () => {
@@ -292,93 +305,94 @@ function App() {
         socket.emit('join_room', joinRoomIdInput.toUpperCase());
     };
 
-    useEffect(() => {
-        const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
-
-        document.addEventListener("fullscreenchange", handleFullscreenChange);
-        document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
-
-        return () => {
-            document.removeEventListener("fullscreenchange", handleFullscreenChange);
-            document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
-        };
-    }, []);
-
-    const requestFullscreenAndLock = async () => {
-        // Request Fullscreen
-        try {
-            if (document.documentElement.requestFullscreen) {
-                await document.documentElement.requestFullscreen();
-            }
-        } catch (err) {
-            console.warn("Fullscreen request failed:", err);
-        }
-
-        // Lock Orientation to Landscape
-        try {
-            const orientation = screen.orientation as any;
-            if (orientation && orientation.lock) {
-                await orientation.lock("landscape");
-            }
-        } catch (err) {
-            console.warn("Orientation lock failed:", err);
-        }
-    };
-
-    const handleResumeClick = async () => {
-        await requestFullscreenAndLock();
-        // The event listener will automatically update `isFullscreen`
-    };
-
     const currentScene = (scene: Phaser.Scene) => {
         console.log('[Pocket Crusader] Active scene:', scene.scene.key);
     };
 
     return (
         <div id="app" style={{ width: '100vw', height: '100vh', overflow: 'hidden', margin: 0, padding: 0 }}>
-            {/* Landing Page Lobby */}
+            {/* ── LANDING LOBBY / MAIN MENU ─────────────────── */}
             {!hasStarted && (
                 <div className={styles.container}>
                     <div className={styles.panel}>
                         <div className={styles.content}>
-                            <h1 className={styles.title}>Pocket Crusader</h1>
-                            <p className={styles.subtitle}>Mobile-First Medieval RTS</p>
-                            
+                            <div className={styles.titleRibbon}>
+                                <h1 className={styles.title}>Pocket Crusader</h1>
+                                <p className={styles.subtitle}>Medieval Mobile RTS</p>
+                            </div>
+
+                            {/* Map Information Badge */}
+                            <div className={styles.mapBadge}>
+                                <span>🗺️ Map: <strong>Greenvale Frontier (96×64)</strong></span>
+                            </div>
+
+                            {/* Configurable Difficulty Selector */}
+                            <div className={styles.difficultyGroup}>
+                                <div className={styles.difficultyLabel}>Skirmish Difficulty</div>
+                                <div className={styles.difficultyButtons}>
+                                    <button
+                                        type="button"
+                                        className={`${styles.difficultyBtn} ${difficulty === 'easy' ? styles.difficultyBtnActive : ''}`}
+                                        onClick={() => setDifficulty('easy')}
+                                    >
+                                        Easy (Default)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`${styles.difficultyBtn} ${difficulty === 'normal' ? styles.difficultyBtnActive : ''}`}
+                                        onClick={() => setDifficulty('normal')}
+                                    >
+                                        Normal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`${styles.difficultyBtn} ${difficulty === 'hard' ? styles.difficultyBtnActive : ''}`}
+                                        onClick={() => setDifficulty('hard')}
+                                    >
+                                        Hard
+                                    </button>
+                                </div>
+                                <div className={styles.difficultyDesc}>
+                                    {AI_DIFFICULTIES[difficulty].description}
+                                </div>
+                            </div>
+
                             {!createdRoomId ? (
-                                <div className={styles.lobbyActions}>
-                                    <button className={styles.lobbyBtnPrimary} onClick={handleStartSoloSkirmish} style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}>
-                                        Play Solo (Skirmish)
+                                <div style={{ width: '100%' }}>
+                                    {/* Primary Play Button */}
+                                    <button className={styles.bigBlueBtn} onClick={handleStartSoloSkirmish}>
+                                        <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/play.png" alt="Play" style={{ width: 22, height: 22 }} />
+                                        Play Skirmish (Solo)
                                     </button>
 
-                                    <div className={styles.dividerText}>OR MULTIPLAYER</div>
-
-                                    <button className={styles.lobbyBtnSecondary} onClick={handleCreateRoom}>
-                                        Create Room
-                                    </button>
-                                    
-                                    <div className={styles.dividerText}>OR JOIN</div>
-                                    
-                                    <div className={styles.joinContainer}>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Room Code" 
-                                            maxLength={4}
-                                            value={joinRoomIdInput}
-                                            onChange={(e) => setJoinRoomIdInput(e.target.value.toUpperCase())}
-                                            className={styles.lobbyInput}
-                                        />
-                                        <button className={styles.lobbyBtnSecondary} onClick={handleJoinRoom}>
-                                            Join
-                                        </button>
+                                    {/* Multiplayer Section */}
+                                    <div className={styles.multiplayerSection}>
+                                        <div className={styles.sectionDivider}>— Online Multiplayer —</div>
+                                        <div className={styles.secondaryBtnRow}>
+                                            <button className={styles.secondaryBtn} onClick={handleCreateRoom}>
+                                                Create Room
+                                            </button>
+                                        </div>
+                                        <div className={styles.joinContainer}>
+                                            <input 
+                                                type="text" 
+                                                placeholder="ROOM" 
+                                                maxLength={4}
+                                                value={joinRoomIdInput}
+                                                onChange={(e) => setJoinRoomIdInput(e.target.value.toUpperCase())}
+                                                className={styles.lobbyInput}
+                                            />
+                                            <button className={styles.secondaryBtn} onClick={handleJoinRoom} style={{ flex: '0 0 80px' }}>
+                                                Join
+                                            </button>
+                                        </div>
+                                        {lobbyStatus && <div className={styles.lobbyStatus}>{lobbyStatus}</div>}
                                     </div>
-                                    {lobbyStatus && <p className={styles.lobbyStatus}>{lobbyStatus}</p>}
                                 </div>
                             ) : (
-                                <div className={styles.waitingContainer}>
-                                    <h2 className={styles.roomCodeDisplay}>Room: {createdRoomId}</h2>
-                                    <p className={styles.lobbyStatus}>{lobbyStatus}</p>
+                                <div style={{ width: '100%', padding: '16px 0' }}>
+                                    <h2 style={{ color: '#fde047', margin: '0 0 8px 0', fontSize: 24 }}>Room: {createdRoomId}</h2>
+                                    <div className={styles.lobbyStatus}>{lobbyStatus}</div>
                                 </div>
                             )}
                         </div>
@@ -386,99 +400,126 @@ function App() {
                 </div>
             )}
 
-            {/* Phaser Game Canvas */}
+            {/* ── ACTIVE GAMEPLAY PHASER CANVAS & HUD ───────── */}
             {hasStarted && (
                 <>
                     <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-                    
-                    {/* Game HUD Overlay */}
+
+                    {/* Top Medieval Wood Bar */}
                     <div className={styles.hud}>
-                        {/* Resources Section */}
-                        <div className={styles.hudSection}>
-                            <div className={styles.hudItem}>
-                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.hudIconImg} />
+                        <div className={styles.hudGroup}>
+                            {/* Wood Counter */}
+                            <div className={styles.hudItem} title="Wood">
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{wood}</span>
                             </div>
-                            <div className={styles.hudItem} style={{ marginLeft: '12px' }}>
-                                <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.hudIconImg} />
+
+                            {/* Gold Counter */}
+                            <div className={styles.hudItem} title="Gold">
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{gold}</span>
                             </div>
-                        </div>
 
-                        <div className={styles.hudDivider} />
-
-                        {/* Population Section */}
-                        <div className={styles.hudSection}>
-                            <div className={styles.hudItem}>
-                                <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Gold" className={styles.hudIconImg} />
+                            {/* Population Indicator */}
+                            <div className={styles.hudItem} title="Population">
+                                <img src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Pop" className={styles.hudIconImg} />
                                 <span className={styles.hudValue}>{currentPop}/{maxPop}</span>
                             </div>
                         </div>
 
-                        <div className={styles.hudDivider} />
-
-                        {/* Build Button */}
-                        <button className={styles.hudBuildBtn} onClick={() => useGameStore.getState().toggleBuildMenu()}>
-                            <img src="assets/tiny-swords/UI Elements/UI Elements/Icons/hammer.png" alt="Build" className={styles.hudIconImg} />
+                        {/* Build Action Button */}
+                        <button 
+                            className={styles.hudBuildBtn} 
+                            onClick={() => useGameStore.getState().toggleBuildMenu()}
+                            title="Build Structures"
+                        >
+                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/hammer.png" alt="Build" className={styles.hudBuildIcon} />
                         </button>
                     </div>
 
-                    {/* Quick Action Sidebar */}
+                    {/* Left Quick Action Sidebar */}
                     <div className={styles.quickSidebar}>
-                        <div className={styles.quickSidebarItem} onClick={() => EventBus.emit('select_idle_worker')} title="Select Worker">
-                            <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Workers" />
+                        <div 
+                            className={styles.quickSidebarSlot} 
+                            onClick={() => EventBus.emit('select_idle_worker')} 
+                            title="Select Worker"
+                        >
+                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Pawn_Blue.png" alt="Workers" className={styles.quickSidebarAvatar} />
                             <div className={styles.stackBadge}>{workerCount}</div>
                         </div>
-                        <div className={styles.quickSidebarItem} onClick={() => EventBus.emit('select_idle_warrior')} title="Select Warrior">
-                            <img src="assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt="Warriors" />
+                        <div 
+                            className={styles.quickSidebarSlot} 
+                            onClick={() => EventBus.emit('select_idle_warrior')} 
+                            title="Select Warrior"
+                        >
+                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Human Avatars/Avatar_Warrior_Blue.png" alt="Warriors" className={styles.quickSidebarAvatar} />
                             <div className={styles.stackBadge}>{warriorCount}</div>
                         </div>
                     </div>
 
-
-                    {/* Selection Panel */}
+                    {/* Contextual Selection Panel */}
                     {!isPlacing && <SelectionPanel />}
 
-                    {/* Placement Mode Indicator */}
+                    {/* Placement Mode Active Indicator */}
                     {isPlacing && (
                         <div className={styles.placementBar}>
-                            Tap the map to place · <button onClick={() => useGameStore.getState().setPlacingBuilding(null)}>Cancel</button>
+                            <span>Tap ground to place structure</span>
+                            <button 
+                                className={styles.cancelPlacementBtn}
+                                onClick={() => useGameStore.getState().setPlacingBuilding(null)}
+                            >
+                                Cancel
+                            </button>
                         </div>
                     )}
 
-                    {/* Build Menu */}
+                    {/* Build Menu Scroll */}
                     <BuildMenu wood={wood} gold={gold} />
 
                     {/* Victory / Defeat Modal */}
                     {isGameOver && (
                         <div className={styles.modalOverlay}>
-                            <div className={`${styles.modalCard} ${gameResult === 'victory' ? styles.modalVictory : styles.modalDefeat}`}>
-                                <div className={styles.modalIcon}>
-                                    {gameResult === 'victory' ? '👑' : '💀'}
+                            <div className={styles.modalCard}>
+                                <div className={styles.modalBanner}>
+                                    <h2 className={styles.modalTitle}>
+                                        {gameResult === 'victory' ? 'VICTORY!' : 'DEFEAT'}
+                                    </h2>
                                 </div>
-                                <h2 className={styles.modalTitle}>
-                                    {gameResult === 'victory' ? 'VICTORY!' : 'DEFEAT'}
-                                </h2>
                                 <p className={styles.modalDescription}>
                                     {gameResult === 'victory'
-                                        ? 'The enemy King has fallen! Your crusader kingdom reigns supreme.'
-                                        : 'Your King has perished in battle. The fortress has fallen.'}
+                                        ? 'The enemy King has fallen! Your crusader kingdom reigns supreme over Greenvale Frontier.'
+                                        : 'Your King has perished on the battlefield. The stronghold has fallen.'}
                                 </p>
-                                <div className={styles.modalStats}>
-                                    <div className={styles.modalStatItem}>
-                                        <span>🪵 Wood Harvested</span>
-                                        <strong>{wood}</strong>
+                                
+                                <div className={styles.modalStatsGrid}>
+                                    <div className={styles.modalStatRow}>
+                                        <div className={styles.modalStatKey}>
+                                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/log.png" alt="Wood" className={styles.costIcon} />
+                                            <span>Wood Harvested:</span>
+                                        </div>
+                                        <span>{wood}</span>
                                     </div>
-                                    <div className={styles.modalStatItem}>
-                                        <span>💰 Gold Harvested</span>
-                                        <strong>{gold}</strong>
+                                    <div className={styles.modalStatRow}>
+                                        <div className={styles.modalStatKey}>
+                                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/coin.png" alt="Gold" className={styles.costIcon} />
+                                            <span>Gold Harvested:</span>
+                                        </div>
+                                        <span>{gold}</span>
                                     </div>
-                                    <div className={styles.modalStatItem}>
-                                        <span>⚔️ Army Size</span>
-                                        <strong>{warriorCount} Warriors</strong>
+                                    <div className={styles.modalStatRow}>
+                                        <div className={styles.modalStatKey}>
+                                            <img src="/assets/tiny-swords/UI Elements/UI Elements/Icons/sword.png" alt="Warriors" className={styles.costIcon} />
+                                            <span>Warriors Recruited:</span>
+                                        </div>
+                                        <span>{warriorCount}</span>
                                     </div>
                                 </div>
-                                <button className={styles.modalRestartBtn} onClick={() => window.location.reload()}>
+
+                                <button 
+                                    className={styles.bigBlueBtn} 
+                                    onClick={() => window.location.reload()}
+                                    style={{ width: '80%' }}
+                                >
                                     Play Again
                                 </button>
                             </div>
@@ -487,7 +528,6 @@ function App() {
                 </>
             )}
         </div>
-
     );
 }
 

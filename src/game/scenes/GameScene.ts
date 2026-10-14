@@ -15,11 +15,22 @@ import { GoldHut } from '../entities/GoldHut';
 import { BuildingEntity } from '../entities/BuildingEntity';
 import { useGameStore } from '../../store/useGameStore';
 import { AIManager } from '../managers/AIManager';
+import { BALANCE_CONFIG } from '../config/BalanceConfig';
+import { 
+    GREENVALE_CONFIG, 
+    getGreenvaleResources, 
+    getGreenvaleObstacles, 
+    getGreenvaleDecorations,
+    getGreenvaleBridges,
+    getGreenvaleCliffs,
+    getGreenvaleWaterTiles,
+    getDeterministicGroundFrame
+} from '../map/GreenvaleMap';
 
-const MAP_WIDTH = GRID_COLS * TILE_SIZE;
-const MAP_HEIGHT = GRID_ROWS * TILE_SIZE;
-const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2.0;
+const MAP_WIDTH = GRID_COLS * TILE_SIZE; // 96 * 64 = 6144
+const MAP_HEIGHT = GRID_ROWS * TILE_SIZE; // 64 * 64 = 4096
+const ZOOM_MIN = GREENVALE_CONFIG.camera.minZoom; // 0.35
+const ZOOM_MAX = GREENVALE_CONFIG.camera.maxZoom; // 1.4
 
 export class GameScene extends Scene {
     private gridManager: GridManager;
@@ -58,10 +69,13 @@ export class GameScene extends Scene {
         // 2. Spawn Initial State
         this.spawnInitialWorld();
 
-
-        // 3. Setup Camera
+        // 3. Setup Camera Centered on Player Base
         this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
-        this.cameras.main.setScroll(0, 0);
+        const playerBase = GREENVALE_CONFIG.bases[store.faction || 'blue'];
+        const startX = playerBase.strongholdCol * TILE_SIZE + TILE_SIZE / 2;
+        const startY = playerBase.strongholdRow * TILE_SIZE + TILE_SIZE / 2;
+        this.cameras.main.centerOn(startX, startY);
+        this.cameras.main.setZoom(GREENVALE_CONFIG.camera.defaultZoom);
 
         // 4. Setup Input
         this.input.addPointer(2);
@@ -357,89 +371,185 @@ export class GameScene extends Scene {
 
 
     private spawnInitialWorld() {
-        // Spawn Trees
-        const OBSTACLE_TILES = [
-            { col: 15, row: 5 },
-            { col: 16, row: 5 },
-            { col: 17, row: 5 },
-        ];
-
-        for (const obs of OBSTACLE_TILES) {
-            const tree = new ResourceEntity({
-                scene: this, col: obs.col, row: obs.row, texture: 'tree',
-                resourceType: 'wood', maxHp: 3, yieldPerHit: 5
-            });
-            this.entityManager.addResource(tree);
+        // 1. Natural Terrain Obstacles & Ridges (Shape the chokepoints)
+        const obstacles = getGreenvaleObstacles();
+        for (const obs of obstacles) {
             this.gridManager.blockTile(obs.col, obs.row);
         }
 
-        // Spawn Gold
-        const GOLD_TILES = [
-            { col: 10, row: 5 },
-            { col: 11, row: 5 },
-        ];
-
-        for (const obs of GOLD_TILES) {
-            const gold = new GoldResource({
-                scene: this, col: obs.col, row: obs.row, texture: 'gold_stone_6',
-                resourceType: 'gold', maxHp: 60, yieldPerHit: 10
-            });
-            this.entityManager.addResource(gold);
-            this.gridManager.blockTile(obs.col, obs.row);
+        // Functional wooden bridges must be explicitly walkable in gridManager
+        const bridges = getGreenvaleBridges();
+        for (const b of bridges) {
+            this.gridManager.unblockTile(b.col, b.row);
         }
 
-        // ── Zone Blue (Left Starting Base) ──────────────────────
-        const strongholdBlue = new Stronghold({ scene: this, col: 6, row: 9, texture: 'castle', id: 'stronghold_blue', faction: 'blue' });
+        // Outcrop rocks along perimeter ridges
+        const rockOutcrops = [
+            { col: 25, row: 20 }, { col: 26, row: 20 },
+            { col: 25, row: 44 }, { col: 26, row: 44 },
+            { col: 69, row: 20 }, { col: 70, row: 20 },
+            { col: 69, row: 44 }, { col: 70, row: 44 }
+        ];
+        for (const r of rockOutcrops) {
+            const x = r.col * TILE_SIZE + TILE_SIZE / 2;
+            const y = r.row * TILE_SIZE + TILE_SIZE / 2;
+            this.add.image(x, y, 'dec_rock_1').setScale(0.9).setDepth(y);
+        }
+
+        // 2. Aesthetic Decorations (Non-blocking bushes & scattered rocks)
+        const decorations = getGreenvaleDecorations();
+        for (const dec of decorations) {
+            const x = dec.col * TILE_SIZE + TILE_SIZE / 2;
+            const y = dec.row * TILE_SIZE + TILE_SIZE / 2;
+            this.add.image(x, y, dec.texture, 0).setScale(dec.scale || 0.7).setDepth(y - 5);
+        }
+
+        // 3. Resource Placements (Balanced Starting & Contested Neutral Clusters)
+        const resources = getGreenvaleResources();
+        for (const res of resources) {
+            if (res.type === 'wood') {
+                const tree = new ResourceEntity({
+                    scene: this,
+                    col: res.col,
+                    row: res.row,
+                    texture: 'tree',
+                    resourceType: 'wood',
+                    maxHp: BALANCE_CONFIG.resources.tree.maxHp,
+                    yieldPerHit: BALANCE_CONFIG.resources.tree.yieldPerHit
+                });
+                this.entityManager.addResource(tree);
+                this.gridManager.blockTile(res.col, res.row);
+            } else if (res.type === 'gold') {
+                const gold = new GoldResource({
+                    scene: this,
+                    col: res.col,
+                    row: res.row,
+                    texture: res.texture || 'gold_stone_6',
+                    resourceType: 'gold',
+                    maxHp: BALANCE_CONFIG.resources.goldStone.maxHp,
+                    yieldPerHit: BALANCE_CONFIG.resources.goldStone.yieldPerHit
+                });
+                this.entityManager.addResource(gold);
+                this.gridManager.blockTile(res.col, res.row);
+            }
+        }
+
+        // 4. Zone Blue (West Starting Base)
+        const blueBase = GREENVALE_CONFIG.bases.blue;
+        const strongholdBlue = new Stronghold({
+            scene: this,
+            col: blueBase.strongholdCol,
+            row: blueBase.strongholdRow,
+            texture: 'castle',
+            id: 'stronghold_blue',
+            faction: 'blue'
+        });
         this.entityManager.addBuilding(strongholdBlue);
-        this.gridManager.blockArea(4, 8, 5, 2);
+        this.gridManager.blockArea(blueBase.strongholdCol - 2, blueBase.strongholdRow - 1, 5, 2);
 
-        const kingBlue = new King({ scene: this, col: 5, row: 9, texture: 'pawn-idle', id: 'king_blue', faction: 'blue', texturePrefix: 'pawn' });
+        const kingBlue = new King({
+            scene: this,
+            col: blueBase.kingCol,
+            row: blueBase.kingRow,
+            texture: 'pawn-idle',
+            id: 'king_blue',
+            faction: 'blue',
+            texturePrefix: 'pawn'
+        });
         this.entityManager.addUnit(kingBlue);
 
-        const bluePawn0 = new Worker({ scene: this, col: 5, row: 10, texture: 'pawn-idle', id: 'pawn_blue_0', faction: 'blue', texturePrefix: 'pawn' });
-        const bluePawn1 = new Worker({ scene: this, col: 6, row: 11, texture: 'pawn-idle', id: 'pawn_blue_1', faction: 'blue', texturePrefix: 'pawn' });
-        const bluePawn2 = new Worker({ scene: this, col: 7, row: 10, texture: 'pawn-idle', id: 'pawn_blue_2', faction: 'blue', texturePrefix: 'pawn' });
-        const blueWarrior = new Warrior({ scene: this, col: 5, row: 6, texture: 'warrior-idle', id: 'warrior_blue_0', faction: 'blue', texturePrefix: 'warrior' });
-        this.entityManager.addUnit(bluePawn0);
-        this.entityManager.addUnit(bluePawn1);
-        this.entityManager.addUnit(bluePawn2);
-        this.entityManager.addUnit(blueWarrior);
+        blueBase.pawnCoords.forEach((coord, idx) => {
+            const pawn = new Worker({
+                scene: this,
+                col: coord.col,
+                row: coord.row,
+                texture: 'pawn-idle',
+                id: `pawn_blue_${idx}`,
+                faction: 'blue',
+                texturePrefix: 'pawn'
+            });
+            this.entityManager.addUnit(pawn);
+        });
 
-        // ── Zone Red (Right Starting Base) ─────────────────────
-        const strongholdRed = new Stronghold({ scene: this, col: 25, row: 9, texture: 'castle', id: 'stronghold_red', faction: 'red' });
+        // 5. Zone Red (East Starting Base)
+        const redBase = GREENVALE_CONFIG.bases.red;
+        const strongholdRed = new Stronghold({
+            scene: this,
+            col: redBase.strongholdCol,
+            row: redBase.strongholdRow,
+            texture: 'castle',
+            id: 'stronghold_red',
+            faction: 'red'
+        });
         this.entityManager.addBuilding(strongholdRed);
-        this.gridManager.blockArea(23, 8, 5, 2);
+        this.gridManager.blockArea(redBase.strongholdCol - 2, redBase.strongholdRow - 1, 5, 2);
 
-        const kingRed = new King({ scene: this, col: 24, row: 9, texture: 'pawn-red-idle', id: 'king_red', faction: 'red', texturePrefix: 'pawn-red' });
+        const kingRed = new King({
+            scene: this,
+            col: redBase.kingCol,
+            row: redBase.kingRow,
+            texture: 'pawn-red-idle',
+            id: 'king_red',
+            faction: 'red',
+            texturePrefix: 'pawn-red'
+        });
         this.entityManager.addUnit(kingRed);
 
-        const redPawn0 = new Worker({ scene: this, col: 24, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_0', faction: 'red', texturePrefix: 'pawn-red' });
-        const redPawn1 = new Worker({ scene: this, col: 25, row: 11, texture: 'pawn-red-idle', id: 'pawn_red_1', faction: 'red', texturePrefix: 'pawn-red' });
-        const redPawn2 = new Worker({ scene: this, col: 26, row: 10, texture: 'pawn-red-idle', id: 'pawn_red_2', faction: 'red', texturePrefix: 'pawn-red' });
-        const redWarrior = new Warrior({ scene: this, col: 25, row: 6, texture: 'warrior-red-idle', id: 'warrior_red_0', faction: 'red', texturePrefix: 'warrior-red' });
-        this.entityManager.addUnit(redPawn0);
-        this.entityManager.addUnit(redPawn1);
-        this.entityManager.addUnit(redPawn2);
-        this.entityManager.addUnit(redWarrior);
-
+        redBase.pawnCoords.forEach((coord, idx) => {
+            const pawn = new Worker({
+                scene: this,
+                col: coord.col,
+                row: coord.row,
+                texture: 'pawn-red-idle',
+                id: `pawn_red_${idx}`,
+                faction: 'red',
+                texturePrefix: 'pawn-red'
+            });
+            this.entityManager.addUnit(pawn);
+        });
     }
-
 
     // --- Visuals & Input ---
 
     private drawTileGrid() {
+        // 1. Continuous Base Meadow Layer (Uses verified 100% solid ground variations)
         for (let row = 0; row < GRID_ROWS; row++) {
             for (let col = 0; col < GRID_COLS; col++) {
                 const x = col * TILE_SIZE + TILE_SIZE / 2;
                 const y = row * TILE_SIZE + TILE_SIZE / 2;
-                this.add.image(x, y, 'grass_tiles', 10).setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(0);
+                const frame = getDeterministicGroundFrame(col, row);
+                this.add.image(x, y, 'grass_tiles', frame).setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(0);
             }
+        }
+
+        // 2. Central River Water Tiles (Solid cyan water base)
+        const waterTiles = getGreenvaleWaterTiles();
+        for (const w of waterTiles) {
+            const x = w.col * TILE_SIZE + TILE_SIZE / 2;
+            const y = w.row * TILE_SIZE + TILE_SIZE / 2;
+            this.add.image(x, y, 'water_tile').setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(1);
+        }
+
+        // 3. Central Cliffs / Tebing
+        const cliffs = getGreenvaleCliffs();
+        for (const c of cliffs) {
+            const x = c.col * TILE_SIZE + TILE_SIZE / 2;
+            const y = c.row * TILE_SIZE + TILE_SIZE / 2;
+            this.add.image(x, y, 'grass_tiles', c.frame).setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(2);
+        }
+
+        // 4. Functional Wooden Plank Bridges (WoodTable_Slots)
+        const bridges = getGreenvaleBridges();
+        for (const b of bridges) {
+            const x = b.col * TILE_SIZE + TILE_SIZE / 2;
+            const y = b.row * TILE_SIZE + TILE_SIZE / 2;
+            this.add.image(x, y, 'wood_bridge', b.frame).setDisplaySize(TILE_SIZE, TILE_SIZE).setDepth(3);
         }
     }
 
     private drawGridLines() {
         this.gridGraphics = this.add.graphics();
-        this.gridGraphics.lineStyle(1, 0x000000, 0.15);
+        this.gridGraphics.lineStyle(1, 0x000000, 0.08); // Subtle, non-distracting grid
         this.gridGraphics.setDepth(1);
 
         for (let col = 0; col <= GRID_COLS; col++) {
